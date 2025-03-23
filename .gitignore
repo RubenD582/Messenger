@@ -1,0 +1,7 @@
+# Ignore enviroments
+.env
+.env.local
+
+# Ignore private and public keys
+config/keys/private_key.pem
+config/keys/public_key.pem

@@ -1,0 +1,53 @@
+# Project Setup
+
+## Prerequisites
+Before setting up the project, ensure that the following software is installed on your machine:
+- Node.js (LTS version)
+- npm (comes with Node.js)
+- Docker and Docker Compose
+- Git (if cloning from GitHub)
+
+## Setting up the project
+1. Clone the repository
+   ```
+   git clone <repository-url>
+   cd <project-directory>
+   ```
+
+2. Install Dependencies
+   ```
+   npm install
+   ```
+
+3. Start the services using Docker
+   ```
+   docker-compose up -d
+   ```
+   This will start all required services (PostgreSQL, Kafka, Zookeeper, and the database migration service)
+
+## Database Management
+All database migrations are automatically run by the knex service in Docker.
+
+### Manual migration commands (if needed)
+If you need to run migrations manually:
+
+1. Run migration
+   ```
+   docker-compose run --rm knex migrate:latest --env development
+   ```
+
+2. Roll back migration
+   ```
+   docker-compose run --rm knex migrate:rollback --env development
+   ```
+
+## Stopping the services
+```
+docker-compose down
+```
+
+## Development
+For development with hot reloading, you can run:
+```
+npm run dev
+```
