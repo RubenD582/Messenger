@@ -73,6 +73,7 @@ class _PendingRequestsScreenState extends State<PendingRequestsScreen> {
                   ),
                 )
               : ListView.builder(
+                physics: NeverScrollableScrollPhysics(),
                 itemCount: _pendingRequests.length,
                 itemBuilder: (context, index) {
                   var user = _pendingRequests[index];
@@ -140,7 +141,7 @@ class _PendingRequestsScreenState extends State<PendingRequestsScreen> {
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: Colors.white10,
                                       shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(8),
+                                        borderRadius: BorderRadius.circular(100),
                                       ),
                                       elevation: 0,
                                     ),

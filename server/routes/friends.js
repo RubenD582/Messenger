@@ -38,19 +38,21 @@ router.get("/search", authenticateToken, searchLimiter, async (req, res) => {
         users.username, 
         users.first_name, 
         users.last_name,
+        users.verified,
         COALESCE(friends.status, 'not_friends') AS status,  
         friends.user_id AS sender
       FROM users
       LEFT JOIN friends 
         ON friends.user_id = $1 AND friends.friend_id = users.id  -- Only check one direction!
       WHERE 
-        users.id <> $1  
-        AND (
+        (
           users.first_name ILIKE $2 
           OR users.last_name ILIKE $3
           OR (users.first_name || ' ' || users.last_name) ILIKE $4
           OR users.username ILIKE $5
-        )`,
+        )
+      LIMIT 5
+      `,
       [
         userId, 
         `${searchTerm}%`, 
@@ -59,8 +61,6 @@ router.get("/search", authenticateToken, searchLimiter, async (req, res) => {
         `%${searchTerm}%`
       ]
     );    
-
-    console.log(result.rows);
 
     const users = result.rows;
 
@@ -319,24 +319,27 @@ router.get("/pending-requests/count", authenticateToken, async (req, res) => {
 router.get("/list", authenticateToken, async (req, res) => {
   const userId = req.user.userId;
   let { lastFetched } = req.query;
+  let { status } = req.query || 'accepted';
+
+  console.log(`Fetching for: ${userId}`);
 
   try {
     let query = `
       SELECT users.id AS friend_id, users.username, users.first_name, users.last_name, friends.created_at
       FROM friends 
       JOIN users ON users.id = friends.friend_id 
-      WHERE friends.user_id = $1 AND friends.status = 'accepted'`;
+      WHERE friends.user_id = $1 AND friends.status = $2`;
 
-    let params = [userId];
+    let params = [userId, status];
 
     // Validate lastFetched
     if (lastFetched && lastFetched !== "null" && !isNaN(Date.parse(lastFetched))) {
-      query += ` AND friends.created_at > $2`;
+      query += ` AND friends.created_at > $3`;
       params.push(new Date(lastFetched).toISOString()); // Ensure it's a valid timestamp
     }
 
     const friends = await db.query(query, params);
-    console.log(`Fetching ${friends.rows.length}`)
+    console.log(`Fetching ${friends.rows}`)
 
     // Cache the result with 10-minute expiry
     await redis.setex(`friends_list:${userId}`, 600, JSON.stringify(friends.rows));
@@ -350,8 +353,6 @@ router.get("/list", authenticateToken, async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
-
-
 
 // Add an invalidate cache helper function
 const invalidateCache = async (userId) => {

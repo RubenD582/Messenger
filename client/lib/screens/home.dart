@@ -1,7 +1,8 @@
 import 'dart:async';
+import 'dart:ui';
 
-import 'package:client/screens/homeScreens/pending_requests.dart';
-import 'package:client/screens/search_users.dart';
+import 'package:client/screens/requests.dart';
+import 'search.dart';
 import 'package:client/services/api_service.dart';
 import 'package:client/services/auth.dart';
 import 'package:flutter/cupertino.dart';
@@ -21,6 +22,7 @@ class _HomeState extends State<Home> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
+  double _scrollOffset = 0.0;
   double _scrollYOffset = 0.0;
   double _scrollYOpacity = 0.0;
 
@@ -45,12 +47,12 @@ class _HomeState extends State<Home> {
 
       // Open the Hive box first
       _openFriendsBox().then((_) {
-        // Once the box is opened, fetch friends from the server
         fetchFriends();
       });
 
       _scrollController.addListener(() {
         setState(() {
+          _scrollOffset = _scrollController.offset;
           _scrollYOffset = -(_scrollController.offset / 5).clamp(-100.0, 0.0);
           _scrollYOpacity = (_scrollController.offset / 75).clamp(0, 1);
         });
@@ -93,7 +95,6 @@ class _HomeState extends State<Home> {
 
   Future<void> _loadFriendsFromHive() async {
     if (uuid.isEmpty) {
-      print("UUID is null or empty, cannot load friends.");
       return;
     }
 
@@ -174,16 +175,12 @@ class _HomeState extends State<Home> {
   }
   
   void _showSearchModal() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Color(0xFF141414),
-      barrierColor: Colors.white.withAlpha(10),
-      isScrollControlled: true,
-      builder: (BuildContext context) {
-        return SearchPage();
-      },
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => SearchPage()),
     );
   }
+
 
   @override
   void dispose() {
@@ -206,58 +203,72 @@ class _HomeState extends State<Home> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
+      extendBodyBehindAppBar: true,
       body: CustomScrollView(
         controller: _scrollController,
         slivers: [
-          // **Sticky AppBar (Messages & Icons)**
           SliverAppBar(
-            backgroundColor: Colors.black,
+            backgroundColor: Colors.transparent,
             floating: true,
             pinned: true,
+            scrolledUnderElevation: 0.0,
             expandedHeight: 120,
             toolbarHeight: 70,
+            automaticallyImplyLeading: false,
             flexibleSpace: Builder(
               builder: (context) {
-                // Calculate the text size based on the scroll position
-                // double textSize = 50 - (_scrollOffset * 0.2).clamp(20.0, 23);
-      
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Align(
-                            alignment: Alignment.bottomLeft,
-                            child: Text(
-                              "Messages",
-                              textAlign: TextAlign.left,
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 32,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                          Row(
-                            children: [
-                              _iconButton(Icons.more_horiz, Colors.white.withAlpha(50), _showSearchModal),
-                              const SizedBox(width: 10),
-                              _iconButton(Icons.add, Color.fromARGB(255, 0, 122, 255), _showSearchModal),
-                            ],
-                          ),
-                        ],
+                // Animate text size and alignment based on scroll offset
+                double textSize = 32;
+                // double textSize = 50 - (_scrollOffset * 0.2).clamp(18.0, 22.0);
+                // double textAlignment = (_scrollOffset > 30) ? 0.0 : 1.0; // Move the text to the center when scrolling
+
+                return ClipRect(
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.black.withAlpha(175),
                       ),
-                    ],
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Align(
+                                  // alignment: Alignment(0.0, textAlignment),  // Center the text on scroll
+                                  child: Text(
+                                    "Messages",
+                                    textAlign: TextAlign.left,
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: textSize,  // Animate the text size
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                Row(
+                                  children: [
+                                    _iconButton(Icons.more_horiz, Colors.white.withAlpha(50), _showSearchModal),
+                                    const SizedBox(width: 10),
+                                    _iconButton(Icons.add, Color.fromARGB(255, 0, 122, 255), _showSearchModal),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
                 );
               },
             ),
           ),
-      
+                
           // **Sticky Search Header**
           SliverStickyHeader(
             header: Container(
@@ -273,14 +284,12 @@ class _HomeState extends State<Home> {
                   controller: _searchController,
                   placeholder: "Search...",
                   placeholderStyle: const TextStyle(color: Color(0xFF8E8E93), fontSize: 16),
-                  padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 10),
-                  style: const TextStyle(color: Colors.white, fontSize: 16),
+                  style: TextStyle(color: Colors.white),
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
                   backgroundColor: Color(0xFF1C1C1E),
-                  itemColor: Colors.black54,
-                  borderRadius: BorderRadius.circular(15),
-                  onChanged: (value) {
-                    setState(() {});
-                  },
+                  itemColor: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  onChanged: (value) {},
                   onSubmitted: (value) {},
                   prefixIcon: Padding(
                     padding: const EdgeInsets.only(top: 5, left: 8),
@@ -289,6 +298,7 @@ class _HomeState extends State<Home> {
                       color: Color(0xFF8E8E93),
                     ),
                   ),
+                  suffixIcon: Icon(null),
                 ),
               ),
             ),
@@ -299,26 +309,41 @@ class _HomeState extends State<Home> {
                 _scrollYOffset * 0.75
               ),
                 child: Container(
-                  padding: EdgeInsets.only(left: 10, right: 10, top: 5, bottom: 20),
+                  padding: EdgeInsets.only(left: 10, right: 10, top: 2, bottom: 20),
                   child: AnimatedOpacity(
                     opacity: 1 - _scrollYOpacity,
                     duration: Duration(milliseconds: 200),
-                    child: Row(
-                      children: [
-                        chip("All"),
-                        const SizedBox(width: 8),
-                        chip("Pinned"),
-                        const SizedBox(width: 8),
-                        chip("Requests", _pendingFriendRequestsCount),
-                      ],
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          chip("All"),
+                          const SizedBox(width: 6),
+                          chip("Pinned"),
+                          const SizedBox(width: 6),
+                          chip("Requests", _pendingFriendRequestsCount),
+                          const SizedBox(width: 6),
+                          Container(
+                            height: 32,
+                            width: 32,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Color(0xFF1C1C1E),
+                            ),
+                            child: Icon(
+                              Icons.add,
+                              color: Colors.white.withAlpha(150),
+                              size: 18,
+                            ),
+                          )
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ),
-      
-          // const SizedBox(height: 15,),
       
           // **Friend List / Requests**
           SliverFillRemaining(
@@ -405,7 +430,7 @@ class _HomeState extends State<Home> {
             ),
       
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               child: ListTile(
                 contentPadding: EdgeInsets.all(0),
                 leading: CircleAvatar(
@@ -424,8 +449,8 @@ class _HomeState extends State<Home> {
                           '${user['first_name']} ${user['last_name']}',
                           style: TextStyle(
                             color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
                             letterSpacing: -0.3,
                           ),
                         ),
@@ -469,7 +494,7 @@ class _HomeState extends State<Home> {
             decoration: BoxDecoration(
               color: isSelected ? Color.fromARGB(255, 0, 122, 255) : Color(0xFF1C1C1E),
               borderRadius: const BorderRadius.all(
-                Radius.circular(12),
+                Radius.circular(100),
               ),
             ),
             child: Center(
@@ -478,27 +503,28 @@ class _HomeState extends State<Home> {
                 child: Row(
                   children: [
                     // Display the count if it exists, or an empty string if count is null
-                    if (count != null && count != 0 && !isSelected)
-                      Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
-                        child: Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: isSelected ? Colors.white : Color.fromARGB(255, 0, 122, 255),
-                            borderRadius: BorderRadius.all(
-                              Radius.circular(100)
-                            )
-                          ),
-                        ),
-                      ),
+                    // if (count != null && count != 0 && !isSelected)
+                    //   Padding(
+                    //     padding: const EdgeInsets.only(right: 8.0),
+                    //     child: Container(
+                    //       width: 6,
+                    //       height: 6,
+                    //       decoration: BoxDecoration(
+                    //         color: isSelected ? Colors.white : Color.fromARGB(255, 0, 122, 255),
+                    //         borderRadius: BorderRadius.all(
+                    //           Radius.circular(100)
+                    //         )
+                    //       ),
+                    //     ),
+                    //   ),
 
                     Text(
                       name,
-                      style: const TextStyle(
-                        color: Color(0xFFFFFFFF),
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : Color(0xFFFFFFFF).withAlpha(150),
                         fontSize: 13,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.3,
                       ),
                     ),
 
@@ -507,11 +533,11 @@ class _HomeState extends State<Home> {
                       Padding(
                         padding: const EdgeInsets.only(left: 4.0),
                         child: Text(
-                          '(${count.toString()})',
+                          '(${count >= 10 ? '9+' : count.toString()})',
                           style: TextStyle(
                             color: isSelected ? Colors.white : Color.fromARGB(140, 255, 255, 255),
                             fontSize: 13,
-                            fontWeight: FontWeight.w500,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),

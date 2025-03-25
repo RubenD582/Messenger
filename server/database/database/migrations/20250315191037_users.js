@@ -9,6 +9,7 @@ exports.up = function(knex) {
 	  table.string('last_name').notNullable();
 	  table.string('username').notNullable().unique();
 	  table.string('password').notNullable();
+	  table.boolean('verified').notNullable().defaultTo(false);
 	  table.timestamps(true, true);
 	});
   };

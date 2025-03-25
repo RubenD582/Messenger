@@ -111,10 +111,10 @@ class ApiService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> fetchFriends() async {
+  Future<List<Map<String, dynamic>>> fetchFriends({status = 'accepted'}) async {
     String? lastFetchedTimestamp = await _getLastFetchedTimestamp();
 
-    final String apiUrl = '$baseUrl/friends/list?lastFetched=$lastFetchedTimestamp';
+    final String apiUrl = '$baseUrl/friends/list?lastFetched=$lastFetchedTimestamp&status=$status';
     final token = await AuthService.getToken();
 
     final response = await http.get(
@@ -155,6 +155,64 @@ class ApiService {
     if (response.statusCode != 200) {
       final responseBody = json.decode(response.body);
       throw Exception(responseBody['message'] ?? 'Failed to accept friend request');
+    }
+  }
+
+  Future<dynamic> searchUsers(String query) async {
+    try {
+      final token = await AuthService.getToken();
+      final response = await http.get(
+        Uri.parse('$baseUrl/friends/search?q=$query'),
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return json.decode(response.body)['users'];
+      }
+
+      return [];
+    } catch (error) {
+      if (kDebugMode) {
+        print('Error fetching pending requests: $error');
+      }
+    }
+  }
+
+  void sendFriendRequest(String friendId, String uuid) async {
+    final url = Uri.parse('$baseUrl/friends/send-request');
+
+    final body = json.encode({
+      'friendId': friendId,
+      'userId': uuid
+    });
+
+    try {
+      final token = await AuthService.getToken();
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: body,
+      );
+
+      if (response.statusCode == 400) {
+        final errorData = json.decode(response.body);
+        if (kDebugMode) {
+          print("${errorData['message']}");
+        }
+      } else {
+        if (kDebugMode) {
+          print("${response.statusCode}, ${response.body}");
+        }
+      }
+    } catch (error) {
+      if (kDebugMode) {
+        print("Error sending friend request: $error");
+      }
     }
   }
 
