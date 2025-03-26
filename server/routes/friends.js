@@ -318,41 +318,95 @@ router.get("/pending-requests/count", authenticateToken, async (req, res) => {
 
 router.get("/list", authenticateToken, async (req, res) => {
   const userId = req.user.userId;
-  let { lastFetched } = req.query;
-  let { status } = req.query || 'accepted';
-
-  console.log(`Fetching for: ${userId}`);
+  let { lastFetched, clientVersion, status = 'accepted' } = req.query;
 
   try {
+    // Comprehensive friends query with soft delete and versioning
     let query = `
-      SELECT users.id AS friend_id, users.username, users.first_name, users.last_name, friends.created_at
+      SELECT 
+        users.id AS friend_id, 
+        users.username, 
+        users.first_name, 
+        users.last_name, 
+        friends.created_at,
+        CASE 
+          WHEN friends.deleted_at IS NOT NULL THEN 'deleted'
+          ELSE 'active'
+        END AS friend_status
       FROM friends 
       JOIN users ON users.id = friends.friend_id 
-      WHERE friends.user_id = $1 AND friends.status = $2`;
+      WHERE 
+        friends.user_id = $1 
+        AND friends.status = $2
+        AND (friends.deleted_at IS NULL OR friends.deleted_at > NOW() - INTERVAL '30 days')`;
 
     let params = [userId, status];
+    let paramIndex = 3;
 
-    // Validate lastFetched
+    // Timestamp-based filtering
     if (lastFetched && lastFetched !== "null" && !isNaN(Date.parse(lastFetched))) {
-      query += ` AND friends.created_at > $3`;
-      params.push(new Date(lastFetched).toISOString()); // Ensure it's a valid timestamp
+      query += ` AND friends.created_at > $${paramIndex}`;
+      params.push(new Date(lastFetched).toISOString());
+      paramIndex++;
+    }
+
+    // Version-based filtering if client provides version
+    if (clientVersion) {
+      query += ` AND friends.version > $${paramIndex}`;
+      params.push(parseInt(clientVersion, 10));
     }
 
     const friends = await db.query(query, params);
-    console.log(`Fetching ${friends.rows}`)
 
-    // Cache the result with 10-minute expiry
-    await redis.setex(`friends_list:${userId}`, 600, JSON.stringify(friends.rows));
+    // Generate server-side version
+    const serverVersion = Math.floor(Date.now() / 1000);
+
+    // Cache with enhanced metadata
+    const cacheKey = `friends_list:${userId}:${status}`;
+    await redis.setex(cacheKey, 600, JSON.stringify({
+      friends: friends.rows,
+      version: serverVersion
+    }));
 
     res.json({ 
       friends: friends.rows,
-      serverTimestamp: new Date().toISOString()
+      serverTimestamp: new Date().toISOString(),
+      version: serverVersion
     });
   } catch (error) {
     console.error("Error fetching friends:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
+
+// Enhanced delete route with soft delete
+router.delete("/friends/:friendId", authenticateToken, async (req, res) => {
+  const userId = req.user.userId;
+  const friendId = req.params.friendId;
+
+  try {
+    const deleteQuery = `
+      UPDATE friends 
+      SET 
+        deleted_at = NOW(), 
+        version = EXTRACT(EPOCH FROM NOW())::INTEGER 
+      WHERE 
+        user_id = $1 AND friend_id = $2 AND deleted_at IS NULL
+    `;
+
+    const result = await db.query(deleteQuery, [userId, friendId]);
+
+    if (result.rowCount > 0) {
+      res.status(200).json({ message: "Friend removed successfully" });
+    } else {
+      res.status(404).json({ message: "Friend not found" });
+    }
+  } catch (error) {
+    console.error("Error deleting friend:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 
 // Add an invalidate cache helper function
 const invalidateCache = async (userId) => {
