@@ -11,7 +11,7 @@ services:
     networks:
       - messanger_mynetwork
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
 
   zookeeper:
     image: zookeeper:latest
@@ -24,13 +24,14 @@ services:
       - messanger_mynetwork
 
   kafka:
-    image: 'bitnami/kafka:latest'
+    image: 'confluentinc/cp-kafka:7.5.0'
     environment:
-      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
-      - ALLOW_PLAINTEXT_LISTENER=yes
-      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,PLAINTEXT_HOST://:29092
-      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
-      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_LISTENERS=PLAINTEXT://:9092,PLAINTEXT_HOST://:29092
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
     ports:
       - "29092:29092"
     networks:
@@ -54,13 +55,76 @@ services:
     depends_on:
       - postgres
 
-  redis:
-    image: redis:latest
-    container_name: redis
+  # Redis Master
+  redis-master:
+    image: redis:7-alpine
+    container_name: redis-master
+    ports:
+      - "6379:6379"
+    networks:
+      - messanger_mynetwork
+    volumes:
+      - redis_master_data:/data
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redispass123}
+
+  # Redis Replica
+  redis-replica:
+    image: redis:7-alpine
+    container_name: redis-replica
     ports:
       - "6380:6379"
     networks:
       - messanger_mynetwork
+    volumes:
+      - redis_replica_data:/data
+    command: redis-server --appendonly yes --slaveof redis-master 6379 --masterauth ${REDIS_PASSWORD:-redispass123} --requirepass ${REDIS_PASSWORD:-redispass123}
+    depends_on:
+      - redis-master
+
+  # Redis Sentinel 1
+  redis-sentinel-1:
+    image: redis:7-alpine
+    container_name: redis-sentinel-1
+    ports:
+      - "26379:26379"
+    networks:
+      - messanger_mynetwork
+    volumes:
+      - ./server/config/redis/sentinel1.conf:/etc/redis/sentinel.conf
+    command: redis-sentinel /etc/redis/sentinel.conf
+    depends_on:
+      - redis-master
+      - redis-replica
+
+  # Redis Sentinel 2
+  redis-sentinel-2:
+    image: redis:7-alpine
+    container_name: redis-sentinel-2
+    ports:
+      - "26380:26379"
+    networks:
+      - messanger_mynetwork
+    volumes:
+      - ./server/config/redis/sentinel2.conf:/etc/redis/sentinel.conf
+    command: redis-sentinel /etc/redis/sentinel.conf
+    depends_on:
+      - redis-master
+      - redis-replica
+
+  # Redis Sentinel 3
+  redis-sentinel-3:
+    image: redis:7-alpine
+    container_name: redis-sentinel-3
+    ports:
+      - "26381:26379"
+    networks:
+      - messanger_mynetwork
+    volumes:
+      - ./server/config/redis/sentinel3.conf:/etc/redis/sentinel.conf
+    command: redis-sentinel /etc/redis/sentinel.conf
+    depends_on:
+      - redis-master
+      - redis-replica
 
 
 networks:
@@ -69,3 +133,5 @@ networks:
 
 volumes:
   postgres_data:
+  redis_master_data:
+  redis_replica_data:

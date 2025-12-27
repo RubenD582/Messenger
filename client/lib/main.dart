@@ -1,7 +1,10 @@
 import 'package:client/screens/sign_in.dart';
 import 'package:client/services/notification_service.dart';
-import 'package:flutter/cupertino.dart';
+import 'package:client/database/message_database.dart';
+import 'package:client/theme/colors.dart';
+import 'package:client/theme/typography.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
@@ -9,10 +12,15 @@ import 'package:pull_down_button/pull_down_button.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Initialize notifications
   NotificationService.initNotifications();
 
+  // Initialize Hive for local caching
   final appDocumentDir = await getApplicationDocumentsDirectory();
   await Hive.initFlutter(appDocumentDir.path);
+
+  // Initialize encrypted message database
+  await MessageDatabase.database;
 
   runApp(const MyApp());
 }
@@ -26,36 +34,108 @@ class MyApp extends StatelessWidget {
       title: 'Messenger',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        brightness: Brightness.dark, // Enable global dark mode
-        primaryColor: Colors.blue, // Set primary color to blue for buttons, etc.
-        hintColor: Colors.blue, // Set accent color to blue (this might be used for some UI elements)
-        cardColor: Colors.blue, // Set the default cursor color to blue
-        highlightColor: Colors.white.withAlpha(10),
-        inputDecorationTheme: InputDecorationTheme(
-          focusColor: Colors.blue, // Set color when the field is focused
-          hoverColor: Colors.blue, // Set color when hovering over the text field
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: AppColors.background,
+        primaryColor: AppColors.primary,
+        colorScheme: ColorScheme.dark(
+          primary: AppColors.primary,
+          secondary: AppColors.primaryLight,
+          surface: AppColors.surface,
+          error: AppColors.error,
+          onPrimary: AppColors.textPrimary,
+          onSecondary: AppColors.textPrimary,
+          onSurface: AppColors.textPrimary,
+          onError: AppColors.textPrimary,
         ),
-        buttonTheme: ButtonThemeData(
-          buttonColor: Colors.blue, // Set default button color to blue
-          textTheme: ButtonTextTheme.primary, // Make text in the button white when the button is blue
+
+        // Typography
+        textTheme: TextTheme(
+          displayLarge: AppTypography.h1,
+          displayMedium: AppTypography.h2,
+          displaySmall: AppTypography.h3,
+          bodyLarge: AppTypography.bodyLarge,
+          bodyMedium: AppTypography.body,
+          bodySmall: AppTypography.bodySmall,
+          labelLarge: AppTypography.button,
+          labelMedium: AppTypography.label,
+          labelSmall: AppTypography.caption,
+        ),
+        fontFamily: GoogleFonts.inter().fontFamily,
+
+        // Card theme
+        cardColor: AppColors.surfaceVariant,
+        cardTheme: CardThemeData(
+          color: AppColors.surfaceVariant,
+          elevation: 0,
+        ),
+
+        // App bar theme
+        appBarTheme: AppBarTheme(
+          backgroundColor: AppColors.background,
+          foregroundColor: AppColors.textPrimary,
+          elevation: 0,
+          titleTextStyle: AppTypography.h3,
+        ),
+
+        // Input decoration theme
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: AppColors.surfaceVariant,
+          focusColor: AppColors.primary,
+          hoverColor: AppColors.primary,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: AppColors.primary, width: 2),
+          ),
+        ),
+
+        // Button themes
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.buttonPrimary,
+            foregroundColor: AppColors.textPrimary,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            textStyle: AppTypography.button,
+          ),
         ),
         textButtonTheme: TextButtonThemeData(
           style: TextButton.styleFrom(
-            foregroundColor: Colors.white,
+            foregroundColor: AppColors.primary,
             splashFactory: InkRipple.splashFactory,
+            textStyle: AppTypography.button,
           ),
         ),
+
+        // Icon theme
+        iconTheme: IconThemeData(
+          color: AppColors.textPrimary,
+        ),
+
+        // Ripple/highlight
+        highlightColor: AppColors.ripple,
+        splashColor: AppColors.ripple,
 
         extensions: [
           PullDownButtonTheme(
             routeTheme: PullDownMenuRouteTheme(
-              backgroundColor: CupertinoColors.systemFill.darkElevatedColor, // Frosted glass effect
+              backgroundColor: AppColors.surface,
             ),
             itemTheme: PullDownMenuItemTheme(
-              textStyle: TextStyle(color: Colors.white), // White text
+              textStyle: AppTypography.body,
             ),
             dividerTheme: PullDownMenuDividerTheme(
-              dividerColor: Colors.white24, // Subtle translucent divider
+              dividerColor: AppColors.textTertiary.withValues(alpha: 0.2),
             ),
           ),
         ],

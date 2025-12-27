@@ -6,6 +6,7 @@ const helmet = require("helmet");
 const authRoutes = require("./routes/authentication");
 const chatSocket = require("./sockets/chatSocket");
 const friendRoutes = require("./routes/friends");
+const messageRoutes = require("./routes/messages");
 const friendSocket = require("./sockets/friendSocket"); // Import the new friend socket
 const db = require("./db");
 const dotenv = require("dotenv");
@@ -44,6 +45,7 @@ app.use(cookieParser());
 // Routes
 app.use("/auth", authRoutes);
 app.use("/friends", friendRoutes);
+app.use("/messages", messageRoutes);
 
 // Initialize WebSockets
 chatSocket(io);

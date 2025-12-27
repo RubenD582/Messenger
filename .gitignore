@@ -7,3 +7,5 @@ config/keys/private_key.pem
 config/keys/public_key.pem
 
 .DS_Store
+# Security keys
+config/keys/*.pem

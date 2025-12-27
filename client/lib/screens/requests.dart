@@ -42,14 +42,36 @@ class _PendingRequestsScreenState extends State<PendingRequestsScreen> {
   }
 
   Future<void> acceptFriendRequest(String friendId) async {
+    // Save the request in case we need to rollback
+    final requestToRemove = _pendingRequests.firstWhere((request) => request['id'] == friendId);
+    final int originalIndex = _pendingRequests.indexOf(requestToRemove);
+
+    // Optimistic UI update - remove immediately
+    setState(() {
+      _pendingRequests.removeWhere((request) => request['id'] == friendId);
+    });
+
     try {
       await apiService.acceptFriendRequest(friendId);
-      setState(() {
-        _pendingRequests.removeWhere((request) => request['id'] == friendId);
-      });
+      // Success - UI already updated
     } catch (error) {
       if (kDebugMode) {
         print('Error accepting friend request: $error');
+      }
+
+      // Rollback on error - restore the request
+      setState(() {
+        _pendingRequests.insert(originalIndex, requestToRemove);
+      });
+
+      // Show error to user
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to accept friend request. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }

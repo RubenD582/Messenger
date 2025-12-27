@@ -6,12 +6,26 @@ PODS:
     - Flutter
   - fluttertoast (0.0.2):
     - Flutter
+  - FMDB/SQLCipher (2.7.11):
+    - SQLCipher (~> 4.0)
   - path_provider_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
   - shared_preferences_foundation (0.0.1):
     - Flutter
     - FlutterMacOS
+  - sqflite_darwin (0.0.4):
+    - Flutter
+    - FlutterMacOS
+  - sqflite_sqlcipher (0.0.1):
+    - Flutter
+    - FMDB/SQLCipher (~> 2.7.5)
+    - SQLCipher (= 4.5.4)
+  - SQLCipher (4.5.4):
+    - SQLCipher/standard (= 4.5.4)
+  - SQLCipher/common (4.5.4)
+  - SQLCipher/standard (4.5.4):
+    - SQLCipher/common
 
 DEPENDENCIES:
   - Flutter (from `Flutter`)
@@ -20,6 +34,13 @@ DEPENDENCIES:
   - fluttertoast (from `.symlinks/plugins/fluttertoast/ios`)
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
   - shared_preferences_foundation (from `.symlinks/plugins/shared_preferences_foundation/darwin`)
+  - sqflite_darwin (from `.symlinks/plugins/sqflite_darwin/darwin`)
+  - sqflite_sqlcipher (from `.symlinks/plugins/sqflite_sqlcipher/ios`)
+
+SPEC REPOS:
+  trunk:
+    - FMDB
+    - SQLCipher
 
 EXTERNAL SOURCES:
   Flutter:
@@ -34,15 +55,23 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/path_provider_foundation/darwin"
   shared_preferences_foundation:
     :path: ".symlinks/plugins/shared_preferences_foundation/darwin"
+  sqflite_darwin:
+    :path: ".symlinks/plugins/sqflite_darwin/darwin"
+  sqflite_sqlcipher:
+    :path: ".symlinks/plugins/sqflite_sqlcipher/ios"
 
 SPEC CHECKSUMS:
-  Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   flutter_local_notifications: a5a732f069baa862e728d839dd2ebb904737effb
   flutter_secure_storage: 1ed9476fba7e7a782b22888f956cce43e2c62f13
   fluttertoast: 2c67e14dce98bbdb200df9e1acf610d7a6264ea1
-  path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
-  shared_preferences_foundation: 9e1978ff2562383bd5676f64ec4e9aa8fa06a6f7
+  FMDB: 57486c1117fd8e0e6b947b2f54c3f42bf8e57a4e
+  path_provider_foundation: bb55f6dbba17d0dccd6737fe6f7f34fbd0376880
+  shared_preferences_foundation: 7036424c3d8ec98dfe75ff1667cb0cd531ec82bb
+  sqflite_darwin: 20b2a3a3b70e43edae938624ce550a3cbf66a3d0
+  sqflite_sqlcipher: 704db283a7f99b5b0161bebb3575e108612cf6b9
+  SQLCipher: 905b145f65f349f26da9e60a19901ad24adcd381
 
-PODFILE CHECKSUM: 4305caec6b40dde0ae97be1573c53de1882a07e5
+PODFILE CHECKSUM: 3c63482e143d1b91d2d2560aee9fb04ecc74ac7e
 
 COCOAPODS: 1.16.2

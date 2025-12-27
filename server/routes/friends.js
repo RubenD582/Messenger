@@ -6,14 +6,10 @@ const jwt = require("jsonwebtoken");
 const router = express.Router();
 const { authenticateToken } = require("../middleware/authMiddleware");
 const rateLimit = require("express-rate-limit");
-const Redis = require('ioredis');
 const { producer } = require('../kafkaClient');
 
-// Initialize Redis client
-const redis = new Redis({
-  host: process.env.REDIS_HOST || 'redis',
-  port: process.env.REDIS_PORT || 6379
-});
+// Use shared Redis client with Sentinel support
+const redis = require('../config/redisClient');
 
 // Rate limiter middleware
 const searchLimiter = rateLimit({
@@ -92,60 +88,146 @@ router.post("/send-request", authenticateToken, async (req, res) => {
     return res.status(400).json({ message: "You cannot send a request to yourself." });
   }
 
+  const client = await db.connect();
+
   try {
-    const existingRequest = await db.query(
-      "SELECT created_at FROM friends WHERE user_id = $1 AND friend_id = $2",
+    await client.query('BEGIN');
+
+    // Check if already friends or pending in either direction
+    const existingRelation = await client.query(
+      "SELECT user_id, friend_id, status FROM friends WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)",
       [userId, friendId]
     );
 
-    if (existingRequest.rows.length > 0) {
+    // If already friends, reject
+    if (existingRelation.rows.some(r => r.status === 'accepted')) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: "Already friends." });
+    }
+
+    // Auto-merge: If other person sent request to me, accept both ways
+    const reverseRequest = existingRelation.rows.find(
+      r => r.user_id === friendId && r.friend_id === userId && r.status === 'pending'
+    );
+
+    if (reverseRequest) {
+      // Auto-accept both sides (bidirectional friendship)
+      await client.query(
+        "UPDATE friends SET status = 'accepted' WHERE user_id = $1 AND friend_id = $2",
+        [friendId, userId]
+      );
+      await client.query(
+        "INSERT INTO friends (user_id, friend_id, status, created_at) VALUES ($1, $2, 'accepted', NOW())",
+        [userId, friendId]
+      );
+
+      await client.query('COMMIT');
+
+      // Invalidate cache for both users
+      await invalidateCache(userId);
+      await invalidateCache(friendId);
+
+      // Get user names
+      const userInfo = await db.query("SELECT first_name FROM users WHERE id = $1", [userId]);
+      const friendInfo = await db.query("SELECT first_name FROM users WHERE id = $1", [friendId]);
+
+      // Get updated counts
+      const userCount = await db.query("SELECT COUNT(*) FROM friends WHERE friend_id = $1 AND status = 'pending'", [userId]);
+      const friendCount = await db.query("SELECT COUNT(*) FROM friends WHERE friend_id = $1 AND status = 'pending'", [friendId]);
+
+      // Notify both users
+      await producer.send({
+        topic: 'friend-events',
+        messages: [
+          {
+            key: String(userId),
+            value: JSON.stringify({
+              event: 'friendRequestAccepted',
+              payload: {
+                userId: userId,
+                friendId: friendId,
+                friendName: friendInfo.rows[0].first_name,
+                requestCount: userCount.rows[0].count,
+                timestamp: new Date().toISOString()
+              }
+            })
+          },
+          {
+            key: String(friendId),
+            value: JSON.stringify({
+              event: 'friendRequestAccepted',
+              payload: {
+                userId: friendId,
+                friendId: userId,
+                friendName: userInfo.rows[0].first_name,
+                requestCount: friendCount.rows[0].count,
+                timestamp: new Date().toISOString()
+              }
+            })
+          }
+        ],
+      });
+
+      return res.status(201).json({ message: "Friend request auto-accepted! You are now friends.", autoAccepted: true });
+    }
+
+    // Check if I already sent a request
+    if (existingRelation.rows.some(r => r.user_id === userId && r.friend_id === friendId)) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ message: "Friend request already sent." });
     }
 
-    await db.query(
+    // Normal flow: send new request
+    await client.query(
       "INSERT INTO friends (user_id, friend_id, status, created_at) VALUES ($1, $2, 'pending', NOW())",
       [userId, friendId]
     );
 
-    // Get user info for notification
-    const userInfo = await db.query(
-      "SELECT first_name FROM users WHERE id = $1",
-      [userId]
-    );
+    await client.query('COMMIT');
 
-    // Get amount of friend request
+    // Get user info for notification
+    const userInfo = await db.query("SELECT first_name FROM users WHERE id = $1", [userId]);
     const friendCount = await db.query(
       "SELECT COUNT(*) FROM friends WHERE friend_id = $1 AND status = 'pending'",
-      [userId]
+      [friendId]
     );
 
-    let newFriendCount = parseFloat(friendCount.rows[0].count) + 1;
-    
-    // Publish friend request event to Kafka
+    // Publish friend request event to Kafka (with offline queue support)
     await producer.send({
       topic: 'friend-events',
       messages: [
-        { 
-          key: String(friendId), 
+        {
+          key: String(friendId),
           value: JSON.stringify({
             event: 'newFriendRequest',
             payload: {
               senderId: userId,
               senderName: userInfo.rows[0].first_name,
-              requestCount: newFriendCount,
+              requestCount: friendCount.rows[0].count,
               timestamp: new Date().toISOString()
             }
           })
         },
       ],
     });
-    
+
+    // Queue for offline delivery
+    await queueOfflineNotification(friendId, 'newFriendRequest', {
+      senderId: userId,
+      senderName: userInfo.rows[0].first_name,
+      requestCount: friendCount.rows[0].count,
+      timestamp: new Date().toISOString()
+    });
+
     console.log(`Friend request event published to Kafka for user ${friendId}`);
 
     res.status(201).json({ message: "Friend request sent." });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error("Error sending friend request:", error);
     res.status(500).json({ message: "Server error" });
+  } finally {
+    client.release();
   }
 });
 
@@ -154,26 +236,34 @@ router.post("/accept-request", authenticateToken, async (req, res) => {
   const userId = req.user.userId;
   const { friendId } = req.body;
 
+  const client = await db.connect();
+
   try {
-    const requestExists = await db.query(
+    await client.query('BEGIN');
+
+    const requestExists = await client.query(
       "SELECT * FROM friends WHERE user_id = $1 AND friend_id = $2 AND status = 'pending'",
       [friendId, userId]
     );
 
     if (requestExists.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ message: "No pending friend request found." });
     }
 
-    // A send to B friend request
-    await db.query(
+    // Update original request to accepted
+    await client.query(
       "UPDATE friends SET status = 'accepted' WHERE user_id = $1 AND friend_id = $2 AND status = 'pending'",
       [friendId, userId]
-    ); 
-    // This cause B to sent friend request to A
-    await db.query(
+    );
+
+    // Create reciprocal friendship
+    await client.query(
       "INSERT INTO friends (user_id, friend_id, status, created_at) VALUES ($1, $2, 'accepted', NOW())",
       [userId, friendId]
     );
+
+    await client.query('COMMIT');
 
     console.log(`Friend request accepted: ${friendId} -> ${userId}`);
 
@@ -181,20 +271,29 @@ router.post("/accept-request", authenticateToken, async (req, res) => {
     await invalidateCache(userId);
     await invalidateCache(friendId);
 
-    // Display the name of the person who accepted the friend request
-    const receiverName = await db.query(
-      "SELECT first_name FROM users WHERE id = $1",
-      [userId]
-    );
-    const receiverFriendCount = await db.query(
-      "SELECT COUNT(*) FROM friends WHERE friend_id = $1 AND status = 'pending'",
-      [userId]
-    );
+    // Get user names and counts
+    const receiverName = await db.query("SELECT first_name FROM users WHERE id = $1", [userId]);
+    const senderName = await db.query("SELECT first_name FROM users WHERE id = $1", [friendId]);
+    const receiverCount = await db.query("SELECT COUNT(*) FROM friends WHERE friend_id = $1 AND status = 'pending'", [userId]);
+    const senderCount = await db.query("SELECT COUNT(*) FROM friends WHERE friend_id = $1 AND status = 'pending'", [friendId]);
 
-    // Publish friend acceptance event to Kafka
+    // Notify both users
     await producer.send({
       topic: 'friend-events',
       messages: [
+        {
+          key: String(friendId),
+          value: JSON.stringify({
+            event: 'friendRequestAccepted',
+            payload: {
+              userId: friendId,
+              friendId: userId,
+              friendName: receiverName.rows[0].first_name,
+              requestCount: senderCount.rows[0].count,
+              timestamp: new Date().toISOString()
+            }
+          })
+        },
         {
           key: String(userId),
           value: JSON.stringify({
@@ -202,20 +301,31 @@ router.post("/accept-request", authenticateToken, async (req, res) => {
             payload: {
               userId: userId,
               friendId: friendId,
-              friendName: receiverName.rows[0].first_name,
-              requestCount: receiverFriendCount.rows[0].count,
+              friendName: senderName.rows[0].first_name,
+              requestCount: receiverCount.rows[0].count,
               timestamp: new Date().toISOString()
             }
           })
-        },
+        }
       ],
     });
 
+    // Queue for offline delivery
+    await queueOfflineNotification(friendId, 'friendRequestAccepted', {
+      userId: friendId,
+      friendId: userId,
+      friendName: receiverName.rows[0].first_name,
+      requestCount: senderCount.rows[0].count,
+      timestamp: new Date().toISOString()
+    });
 
     res.json({ message: "Friend request accepted." });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error("Error accepting friend request:", error);
     res.status(500).json({ message: "Server error" });
+  } finally {
+    client.release();
   }
 });
 
@@ -411,14 +521,29 @@ router.delete("/friends/:friendId", authenticateToken, async (req, res) => {
 // Add an invalidate cache helper function
 const invalidateCache = async (userId) => {
   try {
-    await Promise.all([
-      redis.del(`pending_requests:${userId}`),
-      redis.del(`pending_requests_count:${userId}`),
-      redis.del(`friends_list:${userId}`)
-    ]);
-    console.log(`Cache invalidated for user ${userId}`);
+    // Get all cache keys for this user using pattern matching
+    const keys = await redis.keys(`*${userId}*`);
+    if (keys.length > 0) {
+      await redis.del(...keys);
+    }
+    console.log(`Cache invalidated for user ${userId} (${keys.length} keys deleted)`);
   } catch (error) {
     console.error(`Error invalidating cache for user ${userId}:`, error);
+  }
+};
+
+// Helper function to queue notifications for offline users
+const queueOfflineNotification = async (userId, event, payload) => {
+  try {
+    const notification = JSON.stringify({ event, payload, timestamp: Date.now() });
+    await redis.lpush(`offline_notifications:${userId}`, notification);
+    // Keep only last 100 notifications per user
+    await redis.ltrim(`offline_notifications:${userId}`, 0, 99);
+    // Expire after 7 days
+    await redis.expire(`offline_notifications:${userId}`, 604800);
+    console.log(`Queued offline notification for user ${userId}`);
+  } catch (error) {
+    console.error(`Error queuing offline notification:`, error);
   }
 };
 

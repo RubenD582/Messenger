@@ -2,13 +2,19 @@ import 'dart:async';
 import 'dart:ui';
 
 import 'package:client/screens/requests.dart';
+import 'package:client/screens/chat_screen.dart';
+import 'package:client/database/message_database.dart';
 import 'search.dart';
 import 'package:client/services/api_service.dart';
 import 'package:client/services/auth.dart';
+import 'package:client/theme/colors.dart';
+import 'package:client/theme/spacing.dart';
+import 'package:client/theme/typography.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_sticky_header/flutter_sticky_header.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:hive/hive.dart';
 
 class Home extends StatefulWidget {
@@ -154,7 +160,7 @@ class _HomeState extends State<Home> {
       final friends = await apiService.fetchFriends();
 
       setState(() {
-        _friends += friends;
+        _friends = friends; // Replace instead of append
       });
 
       await _saveFriendsToHive();
@@ -243,10 +249,11 @@ class _HomeState extends State<Home> {
                                   child: Text(
                                     "Messages",
                                     textAlign: TextAlign.left,
-                                    style: TextStyle(
+                                    style: GoogleFonts.inter(
                                       color: Colors.white,
                                       fontSize: textSize,  // Animate the text size
-                                      fontWeight: FontWeight.w700,
+                                      fontWeight: FontWeight.w600,
+                                      letterSpacing: -0.5,
                                     ),
                                   ),
                                 ),
@@ -282,20 +289,29 @@ class _HomeState extends State<Home> {
       
                 child: CupertinoSearchTextField(
                   controller: _searchController,
-                  placeholder: "Search...",
-                  placeholderStyle: const TextStyle(color: Color(0xFF8E8E93), fontSize: 16),
-                  style: TextStyle(color: Colors.white),
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-                  backgroundColor: Color(0xFF1C1C1E),
+                  placeholder: "Search",
+                  placeholderStyle: TextStyle(
+                    color: AppColors.textTertiary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                  ),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w400,
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 12),
+                  backgroundColor: AppColors.surfaceVariant,
                   itemColor: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(10),
                   onChanged: (value) {},
                   onSubmitted: (value) {},
                   prefixIcon: Padding(
-                    padding: const EdgeInsets.only(top: 5, left: 8),
+                    padding: const EdgeInsets.only(left: 6),
                     child: Icon(
                       CupertinoIcons.search,
-                      color: Color(0xFF8E8E93),
+                      color: AppColors.textTertiary,
+                      size: 18,
                     ),
                   ),
                   suffixIcon: Icon(null),
@@ -395,37 +411,55 @@ class _HomeState extends State<Home> {
           String profilePicture = 'assets/noprofile.png';
       
           return Dismissible(
-            key: Key(user['id'].toString()), // Unique key for each item
-            direction: DismissDirection.horizontal, // Allow swiping in both directions
-            onDismissed: (direction) {
+            key: Key(user['friend_id'].toString()), // Unique key for each item
+            direction: DismissDirection.endToStart, // Only allow right-to-left swipe for delete
+            confirmDismiss: (direction) async {
               if (direction == DismissDirection.endToStart) {
-                // Delete action
-                // deleteRequest(user['id']);
-              } else if (direction == DismissDirection.startToEnd) {
-                // Pin action
-                // pinUser(user['id']);
+                // Show confirmation dialog before deleting
+                final friendName = '${user['first_name']} ${user['last_name']}';
+                final shouldDelete = await _showDeleteConfirmation(context, friendName);
+
+                if (shouldDelete) {
+                  // Delete messages from local storage
+                  final conversationId = _getConversationId(uuid, user['friend_id']);
+                  await _deleteChat(conversationId, index);
+                }
+
+                // Return false to prevent dismissing the item (keep friend in list)
+                return false;
               }
+              return false;
             },
       
-            /// **Left Swipe (Delete)**
+            /// **Right Swipe (Delete)**
             background: Container(
-              color: Colors.blue, // Pin action background
-              alignment: Alignment.centerLeft,
-              padding: EdgeInsets.only(left: 20),
-              child: Icon(
-                Icons.push_pin, // Pin icon
-                color: Colors.white,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.red.shade600, Colors.red.shade800],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
               ),
-            ),
-      
-            /// **Right Swipe (Pin)**
-            secondaryBackground: Container(
-              color: Colors.red, // Delete action background
               alignment: Alignment.centerRight,
               padding: EdgeInsets.only(right: 20),
-              child: Icon(
-                Icons.delete, // Trash icon
-                color: Colors.white,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.delete_outline,
+                    color: Colors.white,
+                    size: 28,
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Delete',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
       
@@ -437,6 +471,20 @@ class _HomeState extends State<Home> {
                   radius: 24,
                   backgroundImage: AssetImage(profilePicture),
                 ),
+                onTap: () {
+                  final conversationId = _getConversationId(uuid, user['friend_id']);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ChatScreen(
+                        conversationId: conversationId,
+                        friendId: user['friend_id'],
+                        friendName: '${user['first_name']} ${user['last_name']}',
+                        apiService: apiService,
+                      ),
+                    ),
+                  );
+                },
                 title: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   mainAxisSize: MainAxisSize.max,
@@ -458,8 +506,8 @@ class _HomeState extends State<Home> {
                           'Tap to send a message',
                           style: TextStyle(
                             color: Color(0xFF76767B),
-                            fontWeight: FontWeight.w500,
-                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
                             letterSpacing: -0.3,
                           ),
                         ),
@@ -475,6 +523,77 @@ class _HomeState extends State<Home> {
     );
   }
 
+
+  // Helper function to generate conversation ID (same logic as backend)
+  String _getConversationId(String userId1, String userId2) {
+    final sorted = [userId1, userId2]..sort();
+    return '${sorted[0]}_${sorted[1]}';
+  }
+
+  // Show confirmation dialog before deleting chat
+  Future<bool> _showDeleteConfirmation(BuildContext context, String friendName) async {
+    return await showCupertinoDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return CupertinoAlertDialog(
+          title: Text('Delete Chat'),
+          content: Text('Delete all messages with $friendName from local storage? This will clear the conversation history on your device only.'),
+          actions: [
+            CupertinoDialogAction(
+              child: Text('Cancel'),
+              onPressed: () {
+                Navigator.of(context).pop(false);
+              },
+            ),
+            CupertinoDialogAction(
+              isDestructiveAction: true,
+              child: Text('Delete Messages'),
+              onPressed: () {
+                Navigator.of(context).pop(true);
+              },
+            ),
+          ],
+        );
+      },
+    ) ?? false;
+  }
+
+  // Delete chat conversation (messages only, keeps friend in list)
+  Future<void> _deleteChat(String conversationId, int index) async {
+    try {
+      // Delete all messages from local database
+      await MessageDatabase.deleteConversation(conversationId);
+
+      if (kDebugMode) {
+        print('Deleted all messages for conversation: $conversationId');
+      }
+
+      // Show confirmation snackbar
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Chat messages deleted from local storage'),
+            backgroundColor: Colors.black87,
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (error) {
+      if (kDebugMode) {
+        print('Error deleting chat: $error');
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete chat'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
 
   // Updated chip function with single selection handling
   Widget chip(String name, [int? count]) {
@@ -522,8 +641,8 @@ class _HomeState extends State<Home> {
                       name,
                       style: TextStyle(
                         color: isSelected ? Colors.white : Color(0xFFFFFFFF).withAlpha(150),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
                         letterSpacing: -0.3,
                       ),
                     ),
@@ -536,8 +655,8 @@ class _HomeState extends State<Home> {
                           '(${count >= 10 ? '9+' : count.toString()})',
                           style: TextStyle(
                             color: isSelected ? Colors.white : Color.fromARGB(140, 255, 255, 255),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                       ),

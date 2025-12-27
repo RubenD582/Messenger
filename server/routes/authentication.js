@@ -19,8 +19,10 @@ const publicKey = fs.readFileSync(path.join(__dirname, "../../config/keys/public
 
 // Create Redis client for rate limiting and token blacklist
 const redisClient = Redis.createClient({
-  host: process.env.REDIS_HOST,
-  port: process.env.REDIS_PORT,
+  socket: {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: process.env.REDIS_PORT || 6380,
+  }
 });
 
 redisClient.connect();

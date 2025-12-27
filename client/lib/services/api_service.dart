@@ -15,6 +15,9 @@ class ApiService {
   String? uuid;
 
   final StreamController<int> _pendingFriendRequestsController = StreamController<int>.broadcast();
+  final StreamController<Map<String, dynamic>> _newMessageController = StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<Map<String, dynamic>> _typingIndicatorController = StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<Map<String, dynamic>> _readReceiptController = StreamController<Map<String, dynamic>>.broadcast();
 
 
   Future<void> init(String? uuid) async {
@@ -30,26 +33,72 @@ class ApiService {
   //////////////////////////////////////////////////////////////////////////////////////////////////
 
   Stream<int> get pendingRequestsStream => _pendingFriendRequestsController.stream;
+  Stream<Map<String, dynamic>> get newMessageStream => _newMessageController.stream;
+  Stream<Map<String, dynamic>> get typingIndicatorStream => _typingIndicatorController.stream;
+  Stream<Map<String, dynamic>> get readReceiptStream => _readReceiptController.stream;
   
   void connectWebSocket(String? uuid) async {
     final token = await AuthService.getToken();
     if (token == null) {
-      // TODO: Handle token retrieval failure
+      print('WebSocket: No token available, cannot connect');
       return;
     }
 
     _socket = IO.io(baseUrl, <String, dynamic>{
       'transports': ['websocket'],
       'autoConnect': false,
-      'extraHeaders': {'Authorization': 'Bearer $token'},
+      'auth': {'token': token}, // Use auth field for JWT
+      'reconnection': true,
+      'reconnectionAttempts': 10,
+      'reconnectionDelay': 1000,
+      'reconnectionDelayMax': 5000,
     });
 
     _socket!.connect();
 
     _socket!.onConnect((_) {
-      if (uuid != null) {
-        _socket!.emit("register", uuid);
+      print('WebSocket: Connected successfully');
+      // No need to manually register - backend auto-registers with JWT userId
+    });
+
+    // Listen for registration confirmation
+    _socket!.on("registered", (data) {
+      print('WebSocket: Registered - ${data['success']}');
+      if (data['queuedNotifications'] != null && data['queuedNotifications'] > 0) {
+        print('WebSocket: Received ${data['queuedNotifications']} queued notifications');
       }
+    });
+
+    // Listen for chat registration confirmation
+    _socket!.on("chatRegistered", (data) {
+      print('WebSocket: Chat Registered - ${data['success']}');
+      if (data['queuedMessages'] != null && data['queuedMessages'] > 0) {
+        print('WebSocket: Received ${data['queuedMessages']} queued messages');
+      }
+    });
+
+    // Listen for new messages
+    _socket!.on("newMessage", (data) {
+      if (kDebugMode) {
+        print('WebSocket: New message received - ${data['messageId']}');
+      }
+      _newMessageController.add(Map<String, dynamic>.from(data));
+    });
+
+    // Listen for typing indicators
+    _socket!.on("typingIndicator", (data) {
+      if (kDebugMode) {
+        print('WebSocket: Typing indicator - ${data['userId']} is ${data['isTyping'] ? 'typing' : 'not typing'}');
+      }
+      _typingIndicatorController.add(Map<String, dynamic>.from(data));
+    });
+
+    // Listen for read receipts
+    _socket!.on("readReceipt", (data) {
+      if (kDebugMode) {
+        print('WebSocket: Read receipt - Conversation ${data['conversationId']} read up to ${data['lastReadSequenceId']}');
+      }
+      _readReceiptController.add(Map<String, dynamic>.from(data));
     });
 
     _socket!.on("newFriendRequest", (data) {
@@ -59,11 +108,11 @@ class ApiService {
         title: 'Friend Request',
         body: '${data['senderName']} has sent you a friend request.'
       );
-      
+
       // Add the updated count to the StreamController
       _pendingFriendRequestsController.add(friendRequestCount);
     });
-    
+
     _socket!.on("friendRequestAccepted", (data) {
       // If friendId is your uuid, then the other person accepted your friend request
       if (data['friendId'] == uuid) {
@@ -79,14 +128,31 @@ class ApiService {
       }
     });
 
+    _socket!.onReconnect((data) {
+      print('WebSocket: Reconnected after ${data} attempts');
+    });
 
     _socket!.onDisconnect((_) {
-      // Handle disconnection
+      print('WebSocket: Disconnected');
+    });
+
+    _socket!.onConnectError((error) {
+      print('WebSocket: Connection error - $error');
     });
   }
 
   void disconnectWebSocket() {
     _socket?.disconnect();
+  }
+
+  // Send typing indicator via socket
+  void sendTypingIndicator(String conversationId, bool isTyping) {
+    if (_socket != null && _socket!.connected) {
+      _socket!.emit('typing', {
+        'conversationId': conversationId,
+        'isTyping': isTyping,
+      });
+    }
   }
 
   Future<List<Map<String, dynamic>>> fetchPendingFriendRequests() async {
@@ -112,9 +178,8 @@ class ApiService {
   }
 
   Future<List<Map<String, dynamic>>> fetchFriends({status = 'accepted'}) async {
-    String? lastFetchedTimestamp = await _getLastFetchedTimestamp();
-
-    final String apiUrl = '$baseUrl/friends/list?lastFetched=$lastFetchedTimestamp&status=$status';
+    // Skip lastFetched to always get full friend list
+    final String apiUrl = '$baseUrl/friends/list?status=$status';
     final token = await AuthService.getToken();
 
     final response = await http.get(
@@ -125,12 +190,9 @@ class ApiService {
       },
     );
 
-    if (response.statusCode == 200) {      
+    if (response.statusCode == 200) {
       final data = json.decode(response.body);
-      if (data['serverTimestamp'] != null) {
-        await _saveLastFetchedTimestamp(data['serverTimestamp']);
-      }
-      
+
       return List<Map<String, dynamic>>.from(data['friends']);
     } else if (response.statusCode == 404) {
       return [];
@@ -255,5 +317,8 @@ class ApiService {
 
   void dispose() {
     _pendingFriendRequestsController.close();
+    _newMessageController.close();
+    _typingIndicatorController.close();
+    _readReceiptController.close();
   }
 }
