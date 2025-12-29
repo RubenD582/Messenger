@@ -56,6 +56,10 @@ dependencies:
   sqflite_sqlcipher: ^2.2.1
   encrypt: ^5.0.3
   sqflite: ^2.4.1
+  image: ^4.0.17
+  clerk_flutter: ^0.0.13-beta
+  email_validator: ^3.0.0
+  pin_code_fields: ^8.0.1
 
 dev_dependencies:
   flutter_test:
@@ -87,6 +91,9 @@ flutter:
     - assets/noprofile.png
     - assets/paint.svg
     - assets/send.svg
+    - assets/pencil.png
+    - assets/highlighter.png
+    - assets/neon.png
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see

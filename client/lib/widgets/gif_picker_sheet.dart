@@ -20,7 +20,6 @@ class _GifPickerSheetState extends State<GifPickerSheet> {
   final FocusNode _focusNode = FocusNode();
   List<TenorGif> _gifs = [];
   bool _isLoading = false;
-  String _currentQuery = '';
   bool _isSearchFocused = false;
   Timer? _debounceTimer;
 
@@ -57,7 +56,6 @@ class _GifPickerSheetState extends State<GifPickerSheet> {
     if (mounted) {
       setState(() {
         _gifs = gifs;
-        _currentQuery = query;
         _isLoading = false;
       });
     }

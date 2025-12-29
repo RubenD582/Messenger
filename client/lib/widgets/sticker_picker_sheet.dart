@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
-import '../services/tenor_service.dart';
+import '../services/klipy_service.dart';
 
 class StickerPickerSheet extends StatefulWidget {
-  final Function(TenorSticker) onStickerSelected;
+  final Function(KlipySticker) onStickerSelected;
 
   const StickerPickerSheet({
     super.key,
@@ -18,9 +18,8 @@ class StickerPickerSheet extends StatefulWidget {
 class _StickerPickerSheetState extends State<StickerPickerSheet> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
-  List<TenorSticker> _stickers = [];
+  List<KlipySticker> _stickers = [];
   bool _isLoading = false;
-  String _currentQuery = '';
   bool _isSearchFocused = false;
   Timer? _debounceTimer;
 
@@ -37,7 +36,7 @@ class _StickerPickerSheetState extends State<StickerPickerSheet> {
 
   Future<void> _loadTrendingStickers() async {
     setState(() => _isLoading = true);
-    final stickers = await TenorService.getTrendingStickers(limit: 30);
+    final stickers = await KlipyService.getTrendingStickers(limit: 30);
     if (mounted) {
       setState(() {
         _stickers = stickers;
@@ -53,11 +52,10 @@ class _StickerPickerSheetState extends State<StickerPickerSheet> {
     }
 
     setState(() => _isLoading = true);
-    final stickers = await TenorService.searchStickers(query, limit: 30);
+    final stickers = await KlipyService.searchStickers(query, limit: 30);
     if (mounted) {
       setState(() {
         _stickers = stickers;
-        _currentQuery = query;
         _isLoading = false;
       });
     }
@@ -162,33 +160,30 @@ class _StickerPickerSheetState extends State<StickerPickerSheet> {
                               child: Stack(
                                 fit: StackFit.expand,
                                 children: [
-                                  Container(
-                                    color: Colors.grey.shade800,
-                                    child: Image.network(
-                                      sticker.previewUrl,
-                                      fit: BoxFit.contain,
-                                      loadingBuilder: (context, child, loadingProgress) {
-                                        if (loadingProgress == null) return child;
-                                        return Container(
-                                          color: Colors.grey.shade900,
-                                          child: const Center(
-                                            child: CupertinoActivityIndicator(
-                                              color: Colors.white,
-                                              radius: 10,
-                                            ),
+                                  Image.network(
+                                    sticker.previewUrl,
+                                    fit: BoxFit.contain,
+                                    loadingBuilder: (context, child, loadingProgress) {
+                                      if (loadingProgress == null) return child;
+                                      return Container(
+                                        color: Colors.transparent,
+                                        child: const Center(
+                                          child: CupertinoActivityIndicator(
+                                            color: Colors.white,
+                                            radius: 10,
                                           ),
-                                        );
-                                      },
-                                      errorBuilder: (context, error, stackTrace) {
-                                        return Container(
-                                          color: Colors.grey.shade900,
-                                          child: const Icon(
-                                            Icons.error_outline,
-                                            color: Colors.grey,
-                                          ),
-                                        );
-                                      },
-                                    ),
+                                        ),
+                                      );
+                                    },
+                                    errorBuilder: (context, error, stackTrace) {
+                                      return Container(
+                                        color: Colors.transparent,
+                                        child: const Icon(
+                                          Icons.error_outline,
+                                          color: Colors.grey,
+                                        ),
+                                      );
+                                    },
                                   ),
                                   // Tap overlay effect
                                   Material(

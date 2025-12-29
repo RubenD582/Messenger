@@ -8,6 +8,7 @@ const chatSocket = require("./sockets/chatSocket");
 const friendRoutes = require("./routes/friends");
 const messageRoutes = require("./routes/messages");
 const friendSocket = require("./sockets/friendSocket"); // Import the new friend socket
+const webhookRoutes = require("./routes/webhooks"); // Import webhook routes for Clerk
 const db = require("./db");
 const dotenv = require("dotenv");
 const cookieParser = require("cookie-parser");
@@ -36,6 +37,10 @@ const io = socketIo(server, {
   },
   transports: ["websocket"],
 });
+
+// IMPORTANT: Register webhook routes BEFORE body parser middleware
+// Webhooks need raw body for signature verification
+app.use("/webhooks", webhookRoutes);
 
 app.use(express.json());
 app.use(cors(corsOptions));

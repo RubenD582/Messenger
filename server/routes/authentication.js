@@ -10,8 +10,10 @@ const Joi = require('joi');
 const Redis = require('redis');
 const cors = require("cors");
 const winston = require("winston");
+const { clerkClient } = require("@clerk/backend");
 const router = express.Router();
 const { authenticateToken } = require("../middleware/authMiddleware");
+const { authenticateClerkToken, revokeSession } = require("../middleware/clerkMiddleware");
 
 // Load private and public keys for JWT signing and verification
 const privateKey = fs.readFileSync(path.join(__dirname, "../../config/keys/private_key.pem"), "utf8");
@@ -228,6 +230,132 @@ router.post("/logout", authenticateToken, async (req, res) => {
 // Basic Route
 router.get("/", (req, res) => {
   res.send("Server is running...");
+});
+
+// ===========================================
+// CLERK AUTHENTICATION ENDPOINTS
+// ===========================================
+
+/**
+ * POST /auth/clerk-signup
+ * Create a new user account with Clerk
+ */
+router.post("/clerk-signup", async (req, res) => {
+  const { email, password, firstName, lastName } = req.body;
+
+  try {
+    // Validate input
+    if (!email || !password || !firstName || !lastName) {
+      return res.status(400).json({ message: "All fields are required" });
+    }
+
+    // Create user in Clerk
+    const user = await clerkClient.users.createUser({
+      emailAddress: [email],
+      password,
+      firstName,
+      lastName,
+      skipPasswordRequirement: false,
+      skipPasswordChecks: false,
+    });
+
+    logger.info(`User created in Clerk: ${user.id} (${email})`);
+
+    // User will be synced to PostgreSQL via webhook
+    // Return success with user ID
+    res.status(201).json({
+      success: true,
+      message: "Account created successfully",
+      userId: user.id,
+    });
+  } catch (error) {
+    logger.error("Error in /auth/clerk-signup:", error);
+
+    // Handle specific Clerk errors
+    if (error.message && error.message.includes("already exists")) {
+      return res.status(400).json({ message: "Email already in use" });
+    }
+
+    res.status(500).json({ message: "Failed to create account" });
+  }
+});
+
+/**
+ * POST /auth/clerk-signin
+ * Sign in with email and password
+ */
+router.post("/clerk-signin", async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    // Validate input
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password are required" });
+    }
+
+    // Note: Clerk doesn't have a direct "sign in" endpoint in the backend SDK
+    // The sign-in flow should happen client-side using Clerk's Frontend API
+    // This endpoint is a placeholder - the client should use Clerk's sign-in flow
+
+    res.status(501).json({
+      message: "Sign in should be handled client-side with Clerk SDK"
+    });
+  } catch (error) {
+    logger.error("Error in /auth/clerk-signin:", error);
+    res.status(500).json({ message: "Sign in failed" });
+  }
+});
+
+/**
+ * GET /auth/me
+ * Verify Clerk session and return current user info
+ * Protected by Clerk authentication middleware
+ */
+router.get("/me", authenticateClerkToken, async (req, res) => {
+  try {
+    // User info is attached to req by authenticateClerkToken middleware
+    res.json({
+      user: {
+        id: req.user.id,
+        email: req.user.email,
+        username: req.user.username,
+        firstName: req.user.firstName,
+        lastName: req.user.lastName,
+        clerkUserId: req.user.clerkUserId,
+      },
+      authenticated: true,
+    });
+  } catch (error) {
+    logger.error("Error in /auth/me endpoint:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+/**
+ * POST /auth/clerk-logout
+ * Revoke Clerk session and mark as inactive in database
+ * Protected by Clerk authentication middleware
+ */
+router.post("/clerk-logout", authenticateClerkToken, async (req, res) => {
+  try {
+    const clerkSessionId = req.clerkSessionId;
+
+    if (!clerkSessionId) {
+      return res.status(400).json({ message: "No session to revoke" });
+    }
+
+    // Revoke the session using helper function
+    const revoked = await revokeSession(clerkSessionId);
+
+    if (revoked) {
+      res.json({ message: "Logged out successfully" });
+    } else {
+      res.status(500).json({ message: "Failed to revoke session" });
+    }
+  } catch (error) {
+    logger.error("Error in /auth/clerk-logout endpoint:", error);
+    res.status(500).json({ message: "Server error" });
+  }
 });
 
 // Export the router

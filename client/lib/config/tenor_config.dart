@@ -1,6 +1,5 @@
 class TenorConfig {
   // Get your free API key from: https://developers.google.com/tenor/guides/quickstart
-  // For now using a demo key - replace with your own!
   static const String apiKey = 'AIzaSyAyimkuYQYF_FXVALexPuGQctUWRURdCYQ'; // Demo key
   static const String baseUrl = 'https://tenor.googleapis.com/v2';
 

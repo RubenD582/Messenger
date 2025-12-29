@@ -4,7 +4,12 @@ const express = require("express");
 const router = express.Router();
 const db = require("../db");
 const { authenticateToken } = require("../middleware/authMiddleware");
+const { authenticateClerkToken, enforceSingleSession } = require("../middleware/clerkMiddleware");
 const { producer } = require('../kafkaClient');
+
+// NOTE: During migration phase, routes use old authenticateToken middleware
+// After user migration is complete, replace with: authenticateClerkToken, enforceSingleSession
+// Example: router.post("/send", authenticateClerkToken, enforceSingleSession, async (req, res) => {
 const { v4: uuidv4 } = require('uuid');
 
 // Use shared Redis client with Sentinel support

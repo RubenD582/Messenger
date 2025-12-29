@@ -7,8 +7,6 @@ import 'search.dart';
 import 'package:client/services/api_service.dart';
 import 'package:client/services/auth.dart';
 import 'package:client/theme/colors.dart';
-import 'package:client/theme/spacing.dart';
-import 'package:client/theme/typography.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -27,7 +25,6 @@ class _HomeState extends State<Home> {
   final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
-  double _scrollOffset = 0.0;
   double _scrollYOffset = 0.0;
   double _scrollYOpacity = 0.0;
 
@@ -57,7 +54,6 @@ class _HomeState extends State<Home> {
 
       _scrollController.addListener(() {
         setState(() {
-          _scrollOffset = _scrollController.offset;
           _scrollYOffset = -(_scrollController.offset / 5).clamp(-100.0, 0.0);
           _scrollYOpacity = (_scrollController.offset / 75).clamp(0, 1);
         });

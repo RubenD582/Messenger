@@ -20,6 +20,7 @@ import 'package:pull_down_button/pull_down_button.dart';
 import 'package:client/widgets/gif_picker_sheet.dart';
 import 'package:client/widgets/sticker_picker_sheet.dart';
 import 'package:client/services/tenor_service.dart';
+import 'package:client/services/klipy_service.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -68,6 +69,7 @@ class _ChatScreenState extends State<ChatScreen> {
   List<DrawingStroke> _drawingStrokes = [];
   DrawingStroke? _currentStroke;
   Color _selectedColor = Colors.white;
+  BrushType _selectedBrush = BrushType.pencil;
   final _colorPageController = PageController();
   int _currentColorPage = 0;
   double _extraBottomSpace = 0; // Extra space at bottom for drawing
@@ -391,8 +393,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Background sync to catch any missed WebSocket messages
   Future<void> _backgroundSync() async {
-    if (_chatServiceWithStorage == null) return;
-
     try {
       if (kDebugMode) {
         print('🔄 Running background sync...');
@@ -525,10 +525,6 @@ class _ChatScreenState extends State<ChatScreen> {
       final difference = time2.difference(time1).abs();
       final withinCluster = difference.inMinutes < 5;
 
-      if (kDebugMode) {
-        print('Time cluster check: ${difference.inMinutes} minutes apart, within cluster: $withinCluster');
-      }
-
       return withinCluster;
     } catch (e) {
       return false;
@@ -557,6 +553,7 @@ class _ChatScreenState extends State<ChatScreen> {
           'points': stroke.points.map((p) => [p.dx, p.dy]).toList(),
           'color': colorHex,
           'strokeWidth': 3.0,
+          'brushType': stroke.brushType.name, // Save brush type
         };
       }).toList();
 
@@ -662,15 +659,8 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Future<void> _sendSticker(TenorSticker sticker) async {
+  Future<void> _sendSticker(KlipySticker sticker) async {
     try {
-      if (kDebugMode) {
-        print('🎨 SENDING STICKER:');
-        print('  ID: ${sticker.id}');
-        print('  URL: ${sticker.stickerUrl}');
-        print('  Title: ${sticker.title}');
-      }
-
       // Create metadata for the sticker
       final metadata = {
         'type': 'sticker',
@@ -891,60 +881,6 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Widget _buildTimestampSeparator(String timestamp) {
-    final messageTime = DateTime.parse(timestamp);
-    final now = DateTime.now();
-    final difference = now.difference(messageTime);
-
-    String formattedTime;
-    if (difference.inDays == 0) {
-      // Today
-      final hour = messageTime.hour.toString().padLeft(2, '0');
-      final minute = messageTime.minute.toString().padLeft(2, '0');
-      formattedTime = 'Today at $hour:$minute';
-    } else if (difference.inDays == 1) {
-      // Yesterday
-      final hour = messageTime.hour.toString().padLeft(2, '0');
-      final minute = messageTime.minute.toString().padLeft(2, '0');
-      formattedTime = 'Yesterday at $hour:$minute';
-    } else if (difference.inDays < 7) {
-      // This week - show day name
-      final weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-      final dayName = weekdays[messageTime.weekday - 1];
-      final hour = messageTime.hour.toString().padLeft(2, '0');
-      final minute = messageTime.minute.toString().padLeft(2, '0');
-      formattedTime = '$dayName at $hour:$minute';
-    } else {
-      // Older - show date
-      final month = messageTime.month.toString().padLeft(2, '0');
-      final day = messageTime.day.toString().padLeft(2, '0');
-      final hour = messageTime.hour.toString().padLeft(2, '0');
-      final minute = messageTime.minute.toString().padLeft(2, '0');
-      formattedTime = '$month/$day at $hour:$minute';
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      child: Center(
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceVariant.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Text(
-            formattedTime,
-            style: AppTypography.caption.copyWith(
-              color: AppColors.textSecondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1118,7 +1054,6 @@ class _ChatScreenState extends State<ChatScreen> {
                   }
 
                   // Estimate height needed (will be adjusted by Stack's intrinsic size)
-                  final estimatedContentHeight = maxPositionedY + 200;
 
                   return SingleChildScrollView(
                     controller: _scrollController,
@@ -1260,7 +1195,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                       double msgHeight;
                                       if (msg.messageType == 'gif') {
                                         // For GIF messages, calculate height based on original dimensions
-                                        final metadata = msg.metadata as Map<String, dynamic>?;
+                                        final metadata = msg.metadata;
                                         final gifWidth = (metadata?['width'] as num?)?.toDouble() ?? 200.0;
                                         final gifHeight = (metadata?['height'] as num?)?.toDouble() ?? 200.0;
 
@@ -1286,7 +1221,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                         msgHeight = displayHeight.clamp(100.0, maxDisplayHeight);
                                       } else if (msg.messageType == 'sticker') {
                                         // For sticker messages, calculate height based on original dimensions
-                                        final metadata = msg.metadata as Map<String, dynamic>?;
+                                        final metadata = msg.metadata;
                                         final stickerWidth = (metadata?['width'] as num?)?.toDouble() ?? 200.0;
                                         final stickerHeight = (metadata?['height'] as num?)?.toDouble() ?? 200.0;
 
@@ -1312,7 +1247,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                         msgHeight = displayHeight.clamp(80.0, maxDisplayHeight);
                                       } else if (msg.messageType == 'drawing') {
                                         // For drawings, use bounds from metadata
-                                        final metadata = msg.metadata as Map<String, dynamic>?;
+                                        final metadata = msg.metadata;
                                         if (metadata != null && metadata['bounds'] != null) {
                                           final bounds = metadata['bounds'] as Map<String, dynamic>;
                                           final minY = (bounds['minY'] as num?)?.toDouble() ?? 0.0;
@@ -1457,10 +1392,6 @@ class _ChatScreenState extends State<ChatScreen> {
                                           normalMessages[normalIndex + 1].senderId != message.senderId ||
                                           !_isWithinTimeCluster(message, normalMessages[normalIndex + 1]);
 
-                                      if (kDebugMode) {
-                                        print('Message ${message.messageId}: showTimestamp=$showTimestamp (isLast=${normalIndex == normalMessages.length - 1}, diffSender=${normalIndex < normalMessages.length - 1 ? normalMessages[normalIndex + 1].senderId != message.senderId : 'N/A'})');
-                                      }
-
                                       // Add centered timestamp separator if there's a 5+ minute gap from previous message
                                       if (normalIndex > 0 && !_isWithinTimeCluster(normalMessages[normalIndex - 1], message)) {
                                         items.add(
@@ -1555,7 +1486,8 @@ class _ChatScreenState extends State<ChatScreen> {
                           if (_isDrawingMode)
                             Positioned.fill(
                               child: GestureDetector(
-                                onPanStart: (details) {
+                                behavior: HitTestBehavior.opaque,
+                                onPanDown: (details) {
                                   final renderBox = context.findRenderObject() as RenderBox;
                                   final localPosition = renderBox.globalToLocal(details.globalPosition);
 
@@ -1570,6 +1502,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                         contentY / viewportHeight,
                                       )],
                                       color: _selectedColor,
+                                      brushType: _selectedBrush,
                                     );
                                   });
                                 },
@@ -1591,6 +1524,14 @@ class _ChatScreenState extends State<ChatScreen> {
                                   }
                                 },
                                 onPanEnd: (details) {
+                                  if (_currentStroke != null && _currentStroke!.points.isNotEmpty) {
+                                    setState(() {
+                                      _drawingStrokes.add(_currentStroke!);
+                                      _currentStroke = null;
+                                    });
+                                  }
+                                },
+                                onPanCancel: () {
                                   if (_currentStroke != null && _currentStroke!.points.isNotEmpty) {
                                     setState(() {
                                       _drawingStrokes.add(_currentStroke!);
@@ -1907,8 +1848,8 @@ class _ChatScreenState extends State<ChatScreen> {
                               );
                             } else {
                               // My messages: Draggable with a large, centered hitbox.
-                              final isDragging = _draggingMessageId == message.messageId;
-                              final visualOffset = isDragging ? _dragOffset : Offset.zero;
+                              // final isDragging = _draggingMessageId == message.messageId;
+                              // final visualOffset = isDragging ? _dragOffset : Offset.zero;
 
                               // The core bubble widget that will be displayed.
                               final bubbleWidget = _MessageBubbleWithGradient(
@@ -2245,6 +2186,62 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
           ),
+
+          // Brush type selector (top, visible only in drawing mode)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Center(
+                  child: AnimatedSlide(
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeOutCubic,
+                    offset: _isDrawingMode ? Offset.zero : const Offset(0, -1.5),
+                    child: AnimatedOpacity(
+                      duration: const Duration(milliseconds: 300),
+                      opacity: _isDrawingMode ? 1.0 : 0.0,
+                      child: IgnorePointer(
+                        ignoring: !_isDrawingMode,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.95),
+                            borderRadius: BorderRadius.circular(25),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildBrushButton(
+                                brushType: BrushType.pencil,
+                                icon: CupertinoIcons.pencil_circle,
+                                label: 'Pencil',
+                              ),
+                              const SizedBox(width: 4),
+                              _buildBrushButton(
+                                brushType: BrushType.highlighter,
+                                icon: CupertinoIcons.paintbrush_fill,
+                                label: 'Highlighter',
+                              ),
+                              const SizedBox(width: 4),
+                              _buildBrushButton(
+                                brushType: BrushType.neon,
+                                icon: CupertinoIcons.bolt_fill,
+                                label: 'Neon',
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -2351,6 +2348,50 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
       maxLines: null,
       textCapitalization: TextCapitalization.sentences,
+    );
+  }
+
+  Widget _buildBrushButton({
+    required BrushType brushType,
+    required IconData icon,
+    required String label,
+  }) {
+    final isSelected = _selectedBrush == brushType;
+
+    // Get asset path based on brush type
+    String assetPath;
+    switch (brushType) {
+      case BrushType.pencil:
+        assetPath = 'assets/pencil.png';
+        break;
+      case BrushType.highlighter:
+        assetPath = 'assets/highlighter.png';
+        break;
+      case BrushType.neon:
+        assetPath = 'assets/neon.png';
+        break;
+    }
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedBrush = brushType;
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF5856D6) : Colors.transparent,
+          shape: BoxShape.circle,
+        ),
+        child: Image.asset(
+          assetPath,
+          width: 20,
+          height: 20,
+          color: isSelected ? Colors.white : Colors.grey.shade400,
+          colorBlendMode: BlendMode.srcIn,
+        ),
+      ),
     );
   }
 
@@ -2635,6 +2676,7 @@ class _MessageBubbleWithGradientState extends State<_MessageBubbleWithGradient> 
 }
 
 // Message bubble widget - Modern design with compact size
+
 class _MessageBubble extends StatelessWidget {
   final Message message;
   final bool isMe;
@@ -2733,55 +2775,37 @@ class _MessageBubble extends StatelessWidget {
           constraints: BoxConstraints(
             maxWidth: MediaQuery.of(context).size.width * 0.4,
           ),
-          child: Column(
-            crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Image.network(
-                message.metadata!['stickerUrl'],
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.high,
-                isAntiAlias: true,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return Container(
-                    height: 150,
-                    color: Colors.transparent,
-                    child: const Center(
-                      child: CupertinoActivityIndicator(
-                        color: Colors.white,
-                        radius: 14,
-                      ),
-                    ),
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    height: 150,
-                    color: Colors.transparent,
-                    child: const Center(
-                      child: Icon(
-                        Icons.error_outline,
-                        color: Colors.grey,
-                        size: 40,
-                      ),
-                    ),
-                  );
-                },
-              ),
-              // Only show timestamp if this is the last in time cluster
-              if (showTimestamp && !message.isPositioned) ...[
-                const SizedBox(height: 4),
-                Text(
-                  _formatTime(message.timestamp),
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w400,
+          child: Image.network(
+            message.metadata!['stickerUrl'],
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.high,
+            isAntiAlias: true,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) return child;
+              return Container(
+                height: 150,
+                color: Colors.transparent,
+                child: const Center(
+                  child: CupertinoActivityIndicator(
+                    color: Colors.white,
+                    radius: 14,
                   ),
                 ),
-              ],
-            ],
+              );
+            },
+            errorBuilder: (context, error, stackTrace) {
+              return Container(
+                height: 150,
+                color: Colors.transparent,
+                child: const Center(
+                  child: Icon(
+                    Icons.error_outline,
+                    color: Colors.grey,
+                    size: 40,
+                  ),
+                ),
+              );
+            },
           ),
         ),
       );
@@ -2965,13 +2989,21 @@ class _MessageBubble extends StatelessWidget {
 }
 
 // Drawing stroke data class (stores normalized coordinates 0.0-1.0)
+enum BrushType {
+  pencil,
+  highlighter,
+  neon,
+}
+
 class DrawingStroke {
   final List<Offset> points; // Normalized coordinates (0.0 to 1.0)
   final Color color;
+  final BrushType brushType;
 
   DrawingStroke({
     required this.points,
     required this.color,
+    this.brushType = BrushType.pencil,
   });
 }
 
@@ -2993,7 +3025,7 @@ class _DrawingMessageWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Parse strokes from metadata
-    final metadata = message.metadata as Map<String, dynamic>?;
+    final metadata = message.metadata;
     if (metadata == null || metadata['strokes'] == null) {
       return const SizedBox.shrink();
     }
@@ -3011,7 +3043,16 @@ class _DrawingMessageWidget extends StatelessWidget {
       final colorInt = int.parse(colorHex.substring(1), radix: 16);
       final color = Color(colorInt);
 
-      return DrawingStroke(points: points, color: color);
+      // Parse brush type (default to pencil for backwards compatibility)
+      final brushTypeName = strokeJson['brushType'] as String?;
+      final brushType = brushTypeName != null
+          ? BrushType.values.firstWhere(
+              (e) => e.name == brushTypeName,
+              orElse: () => BrushType.pencil,
+            )
+          : BrushType.pencil;
+
+      return DrawingStroke(points: points, color: color, brushType: brushType);
     }).toList();
 
     // Calculate bounds from metadata
@@ -3057,30 +3098,129 @@ class _SavedDrawingPainter extends CustomPainter {
     required this.viewportHeight,
   });
 
+  Paint _getPaintForBrush(DrawingStroke stroke, {bool isGlow = false, double glowAlpha = 1.0}) {
+    switch (stroke.brushType) {
+      case BrushType.pencil:
+        return Paint()
+          ..color = stroke.color
+          ..strokeWidth = 3.0
+          ..strokeCap = StrokeCap.round
+          ..style = PaintingStyle.stroke;
+
+      case BrushType.highlighter:
+        return Paint()
+          ..color = stroke.color.withValues(alpha: 0.5)
+          ..strokeWidth = 12.0
+          ..strokeCap = StrokeCap.square
+          ..style = PaintingStyle.stroke;
+
+      case BrushType.neon:
+        if (isGlow) {
+          return Paint()
+            ..color = stroke.color.withValues(alpha: glowAlpha * 0.5)
+            ..strokeWidth = 10.0
+            ..strokeCap = StrokeCap.round
+            ..style = PaintingStyle.stroke
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+        }
+        return Paint()
+          ..color = stroke.color
+          ..strokeWidth = 2.5
+          ..strokeCap = StrokeCap.round
+          ..style = PaintingStyle.stroke;
+    }
+  }
+
+  double _getDotRadiusForBrush(BrushType brushType) {
+    switch (brushType) {
+      case BrushType.pencil:
+        return 3.0;
+      case BrushType.highlighter:
+        return 6.0;
+      case BrushType.neon:
+        return 4.0;
+    }
+  }
+
+  void _drawStroke(Canvas canvas, DrawingStroke stroke, double minX, double minY) {
+    // Handle single-point strokes (dots)
+    if (stroke.points.length == 1) {
+      final point = Offset(
+        (stroke.points[0].dx - minX) * viewportWidth,
+        (stroke.points[0].dy - minY) * viewportHeight,
+      );
+
+      if (stroke.brushType == BrushType.neon) {
+        // Draw glow layers for neon dot
+        final glowPaint = Paint()
+          ..color = stroke.color.withValues(alpha: 0.5)
+          ..style = PaintingStyle.fill
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+        canvas.drawCircle(point, 10.0, glowPaint);
+
+        final corePaint = Paint()
+          ..color = stroke.color
+          ..style = PaintingStyle.fill;
+        canvas.drawCircle(point, 2.5, corePaint);
+      } else if (stroke.brushType == BrushType.highlighter) {
+        // Square dot for highlighter
+        final dotPaint = Paint()
+          ..color = stroke.color.withValues(alpha: 0.5)
+          ..style = PaintingStyle.fill;
+        final rect = Rect.fromCenter(
+          center: point,
+          width: 12.0,
+          height: 12.0,
+        );
+        canvas.drawRect(rect, dotPaint);
+      } else {
+        // Round dot for pencil
+        final dotPaint = Paint()
+          ..color = stroke.color
+          ..style = PaintingStyle.fill;
+        canvas.drawCircle(point, _getDotRadiusForBrush(stroke.brushType), dotPaint);
+      }
+    } else {
+      // Use Path for smoother strokes
+      final path = Path();
+      final firstPoint = Offset(
+        (stroke.points[0].dx - minX) * viewportWidth,
+        (stroke.points[0].dy - minY) * viewportHeight,
+      );
+      path.moveTo(firstPoint.dx, firstPoint.dy);
+
+      for (int i = 1; i < stroke.points.length; i++) {
+        final point = Offset(
+          (stroke.points[i].dx - minX) * viewportWidth,
+          (stroke.points[i].dy - minY) * viewportHeight,
+        );
+        path.lineTo(point.dx, point.dy);
+      }
+
+      // Draw neon with glow effect
+      if (stroke.brushType == BrushType.neon) {
+        // Draw glow layer
+        final glowPaint = _getPaintForBrush(stroke, isGlow: true, glowAlpha: 1.0);
+        canvas.drawPath(path, glowPaint);
+
+        // Draw core bright line
+        final corePaint = _getPaintForBrush(stroke);
+        canvas.drawPath(path, corePaint);
+      } else {
+        // Draw regular stroke
+        final paint = _getPaintForBrush(stroke);
+        canvas.drawPath(path, paint);
+      }
+    }
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     final minX = (bounds['minX'] as num).toDouble();
     final minY = (bounds['minY'] as num).toDouble();
 
     for (var stroke in strokes) {
-      final paint = Paint()
-        ..color = stroke.color
-        ..strokeWidth = 3.0
-        ..strokeCap = StrokeCap.round
-        ..style = PaintingStyle.stroke;
-
-      for (int i = 0; i < stroke.points.length - 1; i++) {
-        // Convert normalized coordinates to pixels, relative to drawing bounds
-        final p1 = Offset(
-          (stroke.points[i].dx - minX) * viewportWidth,
-          (stroke.points[i].dy - minY) * viewportHeight,
-        );
-        final p2 = Offset(
-          (stroke.points[i + 1].dx - minX) * viewportWidth,
-          (stroke.points[i + 1].dy - minY) * viewportHeight,
-        );
-        canvas.drawLine(p1, p2, paint);
-      }
+      _drawStroke(canvas, stroke, minX, minY);
     }
   }
 
@@ -3104,7 +3244,7 @@ class _GifMessageWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Parse GIF data from metadata
-    final metadata = message.metadata as Map<String, dynamic>?;
+    final metadata = message.metadata;
     if (metadata == null || metadata['gifUrl'] == null) {
       return const SizedBox.shrink();
     }
@@ -3205,7 +3345,7 @@ class _StickerMessageWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Parse sticker data from metadata
-    final metadata = message.metadata as Map<String, dynamic>?;
+    final metadata = message.metadata;
     if (metadata == null || metadata['stickerUrl'] == null) {
       return const SizedBox.shrink();
     }
@@ -3243,19 +3383,15 @@ class _StickerMessageWidget extends StatelessWidget {
       height: displayHeight,
       child: Image.network(
         stickerUrl,
-        fit: BoxFit.contain, // Use contain for stickers to preserve transparency
+        fit: BoxFit.contain,
         filterQuality: FilterQuality.high,
         isAntiAlias: true,
         loadingBuilder: (context, child, loadingProgress) {
           if (loadingProgress == null) return child;
           return Container(
             color: Colors.transparent,
-            child: Center(
+            child: const Center(
               child: CircularProgressIndicator(
-                value: loadingProgress.expectedTotalBytes != null
-                    ? loadingProgress.cumulativeBytesLoaded /
-                        loadingProgress.expectedTotalBytes!
-                    : null,
                 color: Colors.white,
                 strokeWidth: 2,
               ),
@@ -3293,48 +3429,132 @@ class _DrawingOverlayPainter extends CustomPainter {
     required this.viewportHeight,
   });
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    // Draw completed strokes (convert from normalized to pixel coordinates)
-    for (var stroke in strokes) {
-      final paint = Paint()
-        ..color = stroke.color
-        ..strokeWidth = 3.0
-        ..strokeCap = StrokeCap.round
-        ..style = PaintingStyle.stroke;
+  Paint _getPaintForBrush(DrawingStroke stroke, {bool isGlow = false, double glowAlpha = 1.0}) {
+    switch (stroke.brushType) {
+      case BrushType.pencil:
+        return Paint()
+          ..color = stroke.color
+          ..strokeWidth = 3.0
+          ..strokeCap = StrokeCap.round
+          ..style = PaintingStyle.stroke;
 
-      for (int i = 0; i < stroke.points.length - 1; i++) {
-        final p1 = Offset(
+      case BrushType.highlighter:
+        return Paint()
+          ..color = stroke.color.withValues(alpha: 0.5)
+          ..strokeWidth = 12.0
+          ..strokeCap = StrokeCap.square
+          ..style = PaintingStyle.stroke;
+
+      case BrushType.neon:
+        if (isGlow) {
+          return Paint()
+            ..color = stroke.color.withValues(alpha: glowAlpha * 0.5)
+            ..strokeWidth = 10.0
+            ..strokeCap = StrokeCap.round
+            ..style = PaintingStyle.stroke
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+        }
+        return Paint()
+          ..color = stroke.color
+          ..strokeWidth = 2.5
+          ..strokeCap = StrokeCap.round
+          ..style = PaintingStyle.stroke;
+    }
+  }
+
+  double _getDotRadiusForBrush(BrushType brushType) {
+    switch (brushType) {
+      case BrushType.pencil:
+        return 3.0;
+      case BrushType.highlighter:
+        return 6.0;
+      case BrushType.neon:
+        return 4.0;
+    }
+  }
+
+  void _drawStroke(Canvas canvas, DrawingStroke stroke) {
+    // Handle single-point strokes (dots)
+    if (stroke.points.length == 1) {
+      final point = Offset(
+        stroke.points[0].dx * viewportWidth,
+        stroke.points[0].dy * viewportHeight,
+      );
+
+      if (stroke.brushType == BrushType.neon) {
+        // Draw glow layers for neon dot
+        final glowPaint = Paint()
+          ..color = stroke.color.withValues(alpha: 0.5)
+          ..style = PaintingStyle.fill
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+        canvas.drawCircle(point, 10.0, glowPaint);
+
+        final corePaint = Paint()
+          ..color = stroke.color
+          ..style = PaintingStyle.fill;
+        canvas.drawCircle(point, 2.5, corePaint);
+      } else if (stroke.brushType == BrushType.highlighter) {
+        // Square dot for highlighter
+        final dotPaint = Paint()
+          ..color = stroke.color.withValues(alpha: 0.5)
+          ..style = PaintingStyle.fill;
+        final rect = Rect.fromCenter(
+          center: point,
+          width: 12.0,
+          height: 12.0,
+        );
+        canvas.drawRect(rect, dotPaint);
+      } else {
+        // Round dot for pencil
+        final dotPaint = Paint()
+          ..color = stroke.color
+          ..style = PaintingStyle.fill;
+        canvas.drawCircle(point, _getDotRadiusForBrush(stroke.brushType), dotPaint);
+      }
+    } else {
+      // Use Path for smoother strokes
+      final path = Path();
+      final firstPoint = Offset(
+        stroke.points[0].dx * viewportWidth,
+        stroke.points[0].dy * viewportHeight,
+      );
+      path.moveTo(firstPoint.dx, firstPoint.dy);
+
+      for (int i = 1; i < stroke.points.length; i++) {
+        final point = Offset(
           stroke.points[i].dx * viewportWidth,
           stroke.points[i].dy * viewportHeight,
         );
-        final p2 = Offset(
-          stroke.points[i + 1].dx * viewportWidth,
-          stroke.points[i + 1].dy * viewportHeight,
-        );
-        canvas.drawLine(p1, p2, paint);
+        path.lineTo(point.dx, point.dy);
       }
+
+      // Draw neon with glow effect
+      if (stroke.brushType == BrushType.neon) {
+        // Draw glow layer
+        final glowPaint = _getPaintForBrush(stroke, isGlow: true, glowAlpha: 1.0);
+        canvas.drawPath(path, glowPaint);
+
+        // Draw core bright line
+        final corePaint = _getPaintForBrush(stroke);
+        canvas.drawPath(path, corePaint);
+      } else {
+        // Draw regular stroke
+        final paint = _getPaintForBrush(stroke);
+        canvas.drawPath(path, paint);
+      }
+    }
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    // Draw completed strokes
+    for (var stroke in strokes) {
+      _drawStroke(canvas, stroke);
     }
 
     // Draw current stroke being drawn
     if (currentStroke != null && currentStroke!.points.isNotEmpty) {
-      final paint = Paint()
-        ..color = currentStroke!.color
-        ..strokeWidth = 3.0
-        ..strokeCap = StrokeCap.round
-        ..style = PaintingStyle.stroke;
-
-      for (int i = 0; i < currentStroke!.points.length - 1; i++) {
-        final p1 = Offset(
-          currentStroke!.points[i].dx * viewportWidth,
-          currentStroke!.points[i].dy * viewportHeight,
-        );
-        final p2 = Offset(
-          currentStroke!.points[i + 1].dx * viewportWidth,
-          currentStroke!.points[i + 1].dy * viewportHeight,
-        );
-        canvas.drawLine(p1, p2, paint);
-      }
+      _drawStroke(canvas, currentStroke!);
     }
   }
 
