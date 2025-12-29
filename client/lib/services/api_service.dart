@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'package:client/config/api_config.dart';
 import 'package:client/services/notification_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,7 +11,7 @@ import 'package:http/http.dart' as http;
 import 'auth.dart';
 
 class ApiService {
-  final String baseUrl = 'http://localhost:3000';
+  final String baseUrl = ApiConfig.baseUrl;
   IO.Socket? _socket;
   String? uuid;
 
@@ -18,7 +19,10 @@ class ApiService {
   final StreamController<Map<String, dynamic>> _newMessageController = StreamController<Map<String, dynamic>>.broadcast();
   final StreamController<Map<String, dynamic>> _typingIndicatorController = StreamController<Map<String, dynamic>>.broadcast();
   final StreamController<Map<String, dynamic>> _readReceiptController = StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<Map<String, dynamic>> _positionUpdateController = StreamController<Map<String, dynamic>>.broadcast();
 
+  // Callback for when WebSocket reconnects
+  Function()? onReconnected;
 
   Future<void> init(String? uuid) async {
     this.uuid = uuid;
@@ -36,18 +40,25 @@ class ApiService {
   Stream<Map<String, dynamic>> get newMessageStream => _newMessageController.stream;
   Stream<Map<String, dynamic>> get typingIndicatorStream => _typingIndicatorController.stream;
   Stream<Map<String, dynamic>> get readReceiptStream => _readReceiptController.stream;
+  Stream<Map<String, dynamic>> get positionUpdateStream => _positionUpdateController.stream;
   
   void connectWebSocket(String? uuid) async {
-    final token = await AuthService.getToken();
-    if (token == null) {
-      print('WebSocket: No token available, cannot connect');
-      return;
-    }
-
     _socket = IO.io(baseUrl, <String, dynamic>{
       'transports': ['websocket'],
       'autoConnect': false,
-      'auth': {'token': token}, // Use auth field for JWT
+      // Use callback function to get fresh token on each connection attempt
+      'auth': (callback) async {
+        final token = await AuthService.getToken();
+        if (token == null || token.isEmpty) {
+          print('WebSocket: No token available, cannot connect');
+          callback({'token': ''});
+          return;
+        }
+        if (kDebugMode) {
+          print('WebSocket: Using fresh token for authentication');
+        }
+        callback({'token': token});
+      },
       'reconnection': true,
       'reconnectionAttempts': 10,
       'reconnectionDelay': 1000,
@@ -57,30 +68,43 @@ class ApiService {
     _socket!.connect();
 
     _socket!.onConnect((_) {
-      print('WebSocket: Connected successfully');
+      if (kDebugMode) {
+        print('🟢 WebSocket: Connected successfully');
+        print('   Socket ID: ${_socket!.id}');
+        print('   User UUID: $uuid');
+      }
       // No need to manually register - backend auto-registers with JWT userId
     });
 
     // Listen for registration confirmation
     _socket!.on("registered", (data) {
-      print('WebSocket: Registered - ${data['success']}');
-      if (data['queuedNotifications'] != null && data['queuedNotifications'] > 0) {
-        print('WebSocket: Received ${data['queuedNotifications']} queued notifications');
+      if (kDebugMode) {
+        print('✅ WebSocket: Friend socket registered - ${data['success']}');
+        if (data['queuedNotifications'] != null && data['queuedNotifications'] > 0) {
+          print('   📬 Received ${data['queuedNotifications']} queued notifications');
+        }
       }
     });
 
     // Listen for chat registration confirmation
     _socket!.on("chatRegistered", (data) {
-      print('WebSocket: Chat Registered - ${data['success']}');
-      if (data['queuedMessages'] != null && data['queuedMessages'] > 0) {
-        print('WebSocket: Received ${data['queuedMessages']} queued messages');
+      if (kDebugMode) {
+        print('✅ WebSocket: Chat registered - ${data['success']}');
+        if (data['queuedMessages'] != null && data['queuedMessages'] > 0) {
+          print('   📬 Received ${data['queuedMessages']} queued messages');
+        }
       }
     });
 
     // Listen for new messages
     _socket!.on("newMessage", (data) {
       if (kDebugMode) {
-        print('WebSocket: New message received - ${data['messageId']}');
+        print('📨 WebSocket: New message received');
+        print('   Message ID: ${data['messageId']}');
+        print('   Conversation ID: ${data['conversationId']}');
+        print('   Sender ID: ${data['senderId']}');
+        print('   Receiver ID: ${data['receiverId']}');
+        print('   Sequence ID: ${data['sequenceId']}');
       }
       _newMessageController.add(Map<String, dynamic>.from(data));
     });
@@ -99,6 +123,14 @@ class ApiService {
         print('WebSocket: Read receipt - Conversation ${data['conversationId']} read up to ${data['lastReadSequenceId']}');
       }
       _readReceiptController.add(Map<String, dynamic>.from(data));
+    });
+
+    // Listen for message position updates
+    _socket!.on("messagePositionUpdate", (data) {
+      if (kDebugMode) {
+        print('WebSocket: Position update - Message ${data['messageId']} moved to (${data['positionX']}, ${data['positionY']})');
+      }
+      _positionUpdateController.add(Map<String, dynamic>.from(data));
     });
 
     _socket!.on("newFriendRequest", (data) {
@@ -129,16 +161,71 @@ class ApiService {
     });
 
     _socket!.onReconnect((data) {
-      print('WebSocket: Reconnected after ${data} attempts');
+      if (kDebugMode) {
+        print('🔄 WebSocket: Reconnected after $data attempts');
+      }
+      // Trigger reconnection callback if set
+      onReconnected?.call();
+    });
+
+    _socket!.onReconnectAttempt((attemptNumber) {
+      if (kDebugMode) {
+        print('🔄 WebSocket: Reconnection attempt #$attemptNumber');
+      }
+    });
+
+    _socket!.onReconnectError((error) {
+      if (kDebugMode) {
+        print('❌ WebSocket: Reconnection error - $error');
+      }
+    });
+
+    _socket!.onReconnectFailed((_) {
+      if (kDebugMode) {
+        print('❌ WebSocket: Reconnection failed after max attempts');
+      }
     });
 
     _socket!.onDisconnect((_) {
-      print('WebSocket: Disconnected');
+      if (kDebugMode) {
+        print('🔴 WebSocket: Disconnected');
+      }
     });
 
     _socket!.onConnectError((error) {
-      print('WebSocket: Connection error - $error');
+      if (kDebugMode) {
+        print('❌ WebSocket: Connection error - $error');
+      }
+
+      // Check if error is related to JWT expiration
+      if (error.toString().contains('jwt expired') || error.toString().contains('authentication failed')) {
+        if (kDebugMode) {
+          print('🔐 WebSocket: JWT token expired - user needs to re-login');
+        }
+        // You could emit an event here to trigger a re-login UI
+      }
     });
+
+    _socket!.onError((error) {
+      if (kDebugMode) {
+        print('❌ WebSocket: Socket error - $error');
+      }
+    });
+  }
+
+  // Get connection status
+  bool get isConnected => _socket?.connected ?? false;
+
+  // Get socket ID for debugging
+  String? get socketId => _socket?.id;
+
+  // Manual reconnect
+  void reconnect() {
+    if (kDebugMode) {
+      print('🔄 Manually reconnecting WebSocket...');
+    }
+    _socket?.disconnect();
+    _socket?.connect();
   }
 
   void disconnectWebSocket() {
@@ -152,6 +239,37 @@ class ApiService {
         'conversationId': conversationId,
         'isTyping': isTyping,
       });
+    }
+  }
+
+  // Send message position update via socket
+  void sendMessagePositionUpdate({
+    required String messageId,
+    required String conversationId,
+    required double positionX,
+    required double positionY,
+    required bool isPositioned,
+    double? rotation,
+    double? scale,
+  }) {
+    if (_socket != null && _socket!.connected) {
+      final data = {
+        'messageId': messageId,
+        'conversationId': conversationId,
+        'positionX': positionX,
+        'positionY': positionY,
+        'isPositioned': isPositioned,
+      };
+
+      // Add rotation and scale if provided
+      if (rotation != null) data['rotation'] = rotation;
+      if (scale != null) data['scale'] = scale;
+
+      _socket!.emit('updateMessagePosition', data);
+
+      if (kDebugMode) {
+        print('WebSocket: Sent position update for message $messageId to ($positionX, $positionY), rotation: $rotation, scale: $scale');
+      }
     }
   }
 
@@ -279,7 +397,6 @@ class ApiService {
   }
 
   Future<int> getRequestCount() async {
-    final String baseUrl = 'http://localhost:3000';
     final Uri url = Uri.parse('$baseUrl/friends/pending-requests/count');
     final token = await AuthService.getToken();
 
@@ -320,5 +437,6 @@ class ApiService {
     _newMessageController.close();
     _typingIndicatorController.close();
     _readReceiptController.close();
+    _positionUpdateController.close();
   }
 }

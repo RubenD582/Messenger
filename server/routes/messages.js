@@ -16,9 +16,17 @@ function getConversationId(userId1, userId2) {
   return `${sorted[0]}_${sorted[1]}`;
 }
 
-// POST /messages/send - Send a message
+// POST /messages/send - Send a message (supports regular messages and drawings)
 router.post("/send", authenticateToken, async (req, res) => {
-  const { receiverId, message, messageType = 'text', metadata = {} } = req.body;
+  const {
+    receiverId,
+    message,
+    messageType = 'text',
+    metadata = {},
+    positionX,
+    positionY,
+    isPositioned = false
+  } = req.body;
   const senderId = req.user.userId;
 
   if (!receiverId || !message) {
@@ -41,7 +49,11 @@ router.post("/send", authenticateToken, async (req, res) => {
       messageType,
       sequenceId,
       timestamp: new Date().toISOString(),
-      metadata
+      metadata,
+      // Position data for positioned messages and drawings
+      positionX: positionX !== undefined ? positionX : null,
+      positionY: positionY !== undefined ? positionY : null,
+      isPositioned: isPositioned || false
     };
 
     // Publish to Kafka
@@ -92,7 +104,14 @@ router.get("/history/:conversationId", authenticateToken, async (req, res) => {
         metadata,
         read_at,
         delivered_at,
-        conversation_id
+        conversation_id,
+        position_x,
+        position_y,
+        is_positioned,
+        positioned_by,
+        positioned_at,
+        rotation,
+        scale
       FROM chats
       WHERE conversation_id = $1
       AND deleted_at IS NULL
@@ -189,6 +208,98 @@ router.get("/unread-count", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Error fetching unread count:", error);
     res.status(500).json({ message: "Failed to fetch unread count" });
+  }
+});
+
+// DELETE /messages/conversation/:conversationId - Delete conversation for BOTH users (Snapchat-style)
+router.delete("/conversation/:conversationId", authenticateToken, async (req, res) => {
+  const { conversationId } = req.params;
+  const userId = req.user.userId;
+  const { userName } = req.body; // Optional: user's display name
+
+  try {
+    // Verify user is part of conversation
+    const [user1, user2] = conversationId.split('_');
+    if (userId !== user1 && userId !== user2) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    const now = new Date().toISOString();
+
+    // Get user's name from database
+    const userResult = await db.query(`
+      SELECT first_name, last_name FROM users WHERE id = $1
+    `, [userId]);
+    const displayName = userResult.rows[0]
+      ? `${userResult.rows[0].first_name} ${userResult.rows[0].last_name}`.trim()
+      : 'Someone';
+
+    // Soft delete all messages in conversation for BOTH users
+    const deleteResult = await db.query(`
+      UPDATE chats
+      SET deleted_at = $1
+      WHERE conversation_id = $2
+      AND deleted_at IS NULL
+    `, [now, conversationId]);
+
+    console.log(`✅ ${displayName} deleted conversation ${conversationId}: ${deleteResult.rowCount} messages (for both users)`);
+
+    // Create a system message: "User cleared the chat"
+    // This helps both users understand what happened
+    const systemMessageId = require('uuid').v4();
+    const otherUserId = userId === user1 ? user2 : user1;
+
+    // Get next sequence ID from Redis
+    const redis = require('../config/redisClient');
+    const sequenceId = await redis.incr(`conversation_seq:${conversationId}`);
+
+    await db.query(`
+      INSERT INTO chats (
+        message_id, conversation_id, sender_id, receiver_id,
+        message, sequence_id, timestamp, message_type, metadata
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `, [
+      systemMessageId,
+      conversationId,
+      userId,
+      otherUserId,
+      `${displayName} cleared the chat`,
+      sequenceId,
+      now,
+      'system',
+      JSON.stringify({ action: 'chat_cleared', clearedBy: userId })
+    ]);
+
+    // Publish system message to Kafka so it's broadcast to both users
+    const systemMessageData = {
+      messageId: systemMessageId,
+      conversationId,
+      senderId: userId,
+      receiverId: otherUserId,
+      message: `${displayName} cleared the chat`,
+      messageType: 'system',
+      sequenceId,
+      timestamp: now,
+      metadata: { action: 'chat_cleared', clearedBy: userId }
+    };
+
+    await producer.send({
+      topic: 'chat-messages',
+      messages: [{
+        key: conversationId,
+        value: JSON.stringify(systemMessageData)
+      }]
+    });
+
+    res.json({
+      message: "Conversation deleted successfully (for both users)",
+      deletedCount: deleteResult.rowCount,
+      systemMessageId
+    });
+
+  } catch (error) {
+    console.error("Error deleting conversation:", error);
+    res.status(500).json({ message: "Failed to delete conversation" });
   }
 });
 

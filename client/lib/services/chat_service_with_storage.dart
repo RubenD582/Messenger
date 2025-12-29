@@ -152,9 +152,94 @@ class ChatServiceWithStorage {
     }
   }
 
+  /// Send drawing message with position and strokes
+  Future<void> sendDrawingMessage({
+    required Map<String, dynamic> metadata,
+    required double positionX,
+    required double positionY,
+  }) async {
+    try {
+      // Reset deleted_locally flag (user is chatting again)
+      await MessageDatabase.resetDeletedLocally(conversationId);
+
+      // Create drawing message
+      final tempMessageId = 'temp_drawing_${DateTime.now().millisecondsSinceEpoch}';
+      final tempMessage = Message(
+        messageId: tempMessageId,
+        conversationId: conversationId,
+        senderId: currentUserId,
+        receiverId: friendId,
+        message: 'Drawing', // Placeholder text
+        sequenceId: 999999, // High number so it appears at the end while pending
+        timestamp: DateTime.now().toIso8601String(),
+        messageType: 'drawing',
+        metadata: metadata,
+        positionX: positionX,
+        positionY: positionY,
+        isPositioned: true,
+      );
+
+      // Save locally immediately for instant UI update
+      await MessageDatabase.insertMessage(tempMessage);
+
+      if (kDebugMode) {
+        print('Saved drawing to local DB (optimistic)');
+      }
+
+      // Send to server via REST API
+      try {
+        final response = await _chatService.sendDrawingMessage(
+          receiverId: friendId,
+          metadata: metadata,
+          positionX: positionX,
+          positionY: positionY,
+        );
+
+        if (kDebugMode) {
+          print('Drawing sent to server: ${response['messageId']}');
+        }
+
+        // Delete the temporary message
+        await MessageDatabase.deleteMessage(tempMessageId);
+
+        // Insert the real message from server
+        final serverMessage = Message(
+          messageId: response['messageId'],
+          conversationId: conversationId,
+          senderId: currentUserId,
+          receiverId: friendId,
+          message: 'Drawing',
+          sequenceId: _parseSequenceId(response['sequenceId']),
+          timestamp: DateTime.now().toIso8601String(),
+          messageType: 'drawing',
+          metadata: metadata,
+          positionX: positionX,
+          positionY: positionY,
+          isPositioned: true,
+        );
+
+        await MessageDatabase.insertMessage(serverMessage);
+
+        if (kDebugMode) {
+          print('Updated drawing message in local DB with server data');
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('Error sending drawing to server: $e');
+        }
+        // Drawing stays in local DB, can retry later
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error in sendDrawingMessage: $e');
+      }
+      rethrow;
+    }
+  }
+
   /// Send message with optimistic UI update
   /// Message appears instantly in local DB, then syncs to server
-  Future<void> sendMessage(String text) async {
+  Future<void> sendMessage(String text, {String? messageType, Map<String, dynamic>? metadata}) async {
     try {
       // Reset deleted_locally flag (user is chatting again)
       await MessageDatabase.resetDeletedLocally(conversationId);
@@ -169,6 +254,8 @@ class ChatServiceWithStorage {
         message: text,
         sequenceId: 999999, // High number so it appears at the end while pending
         timestamp: DateTime.now().toIso8601String(),
+        messageType: messageType ?? 'text',
+        metadata: metadata,
       );
 
       // Save locally immediately for instant UI update
@@ -180,7 +267,7 @@ class ChatServiceWithStorage {
 
       // Send to server
       try {
-        final response = await _chatService.sendMessage(text);
+        final response = await _chatService.sendMessage(text, messageType: messageType, metadata: metadata);
 
         if (kDebugMode) {
           print('Message sent to server: ${response['messageId']}');
@@ -198,6 +285,8 @@ class ChatServiceWithStorage {
           message: text,
           sequenceId: _parseSequenceId(response['sequenceId']),
           timestamp: DateTime.now().toIso8601String(),
+          messageType: messageType ?? 'text',
+          metadata: metadata,
         );
 
         await MessageDatabase.insertMessage(serverMessage);

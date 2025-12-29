@@ -1,10 +1,11 @@
 import 'dart:convert';
+import 'package:client/config/api_config.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http_cookie_store/http_cookie_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService {
-  static const String baseUrl = "http://localhost:3000";
+  static final String baseUrl = ApiConfig.baseUrl;
   static final CookieClient client = CookieClient();
   static final storage = FlutterSecureStorage();  // Make storage static
   static late SharedPreferences prefs;

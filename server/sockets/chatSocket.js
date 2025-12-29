@@ -45,8 +45,9 @@ module.exports = (io) => {
               INSERT INTO chats (
                 message_id, sender_id, receiver_id, message, seen, timestamp,
                 sequence_id, conversation_id, message_type, metadata,
-                kafka_partition, kafka_offset, version
-              ) VALUES ($1, $2, $3, $4, false, $5, $6, $7, $8, $9, $10, $11, $12)
+                kafka_partition, kafka_offset, version,
+                position_x, position_y, is_positioned
+              ) VALUES ($1, $2, $3, $4, false, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
               ON CONFLICT (conversation_id, sequence_id) DO NOTHING
             `, [
               messageData.messageId,
@@ -60,23 +61,35 @@ module.exports = (io) => {
               JSON.stringify(messageData.metadata || {}),
               partition.toString(),
               message.offset,
-              Math.floor(Date.now() / 1000)
+              Math.floor(Date.now() / 1000),
+              messageData.positionX || null,
+              messageData.positionY || null,
+              messageData.isPositioned || false
             ]);
 
             // Get socket IDs from Redis
             const senderSocketId = await redis.get(`user_socket:${senderId}`);
             const receiverSocketId = await redis.get(`user_socket:${receiverId}`);
 
+            console.log(`📤 Emitting message ${messageId}:`);
+            console.log(`   Sender: ${senderId} → Socket: ${senderSocketId || 'NOT FOUND'}`);
+            console.log(`   Receiver: ${receiverId} → Socket: ${receiverSocketId || 'NOT FOUND'}`);
+
             // Emit to both sender and receiver
             if (senderSocketId) {
               io.to(senderSocketId).emit('newMessage', messageData);
+              console.log(`   ✅ Emitted to sender socket ${senderSocketId}`);
+            } else {
+              console.log(`   ❌ Sender socket not found - user may be offline`);
             }
 
             if (receiverSocketId) {
               io.to(receiverSocketId).emit('newMessage', messageData);
+              console.log(`   ✅ Emitted to receiver socket ${receiverSocketId}`);
               // Invalidate unread count cache
               await redis.del(`unread_count:${receiverId}`);
             } else {
+              console.log(`   ❌ Receiver socket not found - queuing offline`);
               // Queue for offline delivery
               await queueOfflineMessage(receiverId, messageData);
             }
@@ -244,6 +257,73 @@ module.exports = (io) => {
         console.error('Error publishing typing indicator:', error);
       }
     });
+
+    // Handle message position updates (direct broadcast for low latency)
+    socket.on("updateMessagePosition", async (data) => {
+      const { messageId, conversationId, positionX, positionY, isPositioned, rotation, scale } = data;
+
+      if (!messageId || !conversationId) {
+        return socket.emit('error', { message: 'Message ID and Conversation ID required for position update' });
+      }
+
+      try {
+        const now = new Date().toISOString();
+
+        // Update database (non-blocking, fire and forget for performance)
+        db.query(`
+          UPDATE chats
+          SET position_x = $1,
+              position_y = $2,
+              is_positioned = $3,
+              positioned_by = $4,
+              positioned_at = $5,
+              rotation = $6,
+              scale = $7
+          WHERE message_id = $8
+          AND conversation_id = $9
+        `, [positionX, positionY, isPositioned, socket.userId, now, rotation || null, scale || null, messageId, conversationId])
+          .catch(err => console.error('Error updating message position in DB:', err));
+
+        // Prepare position update payload
+        const positionUpdate = {
+          messageId,
+          conversationId,
+          positionX,
+          positionY,
+          isPositioned,
+          positionedBy: socket.userId,
+          positionedAt: now
+        };
+
+        // Add rotation and scale if provided
+        if (rotation !== undefined && rotation !== null) positionUpdate.rotation = rotation;
+        if (scale !== undefined && scale !== null) positionUpdate.scale = scale;
+
+        // Get the other user in conversation
+        const [user1, user2] = conversationId.split('_');
+        const otherUserId = user1 === socket.userId ? user2 : user1;
+
+        // Broadcast to both users immediately (game-style networking)
+        const otherSocketId = await redis.get(`user_socket:${otherUserId}`);
+
+        // Send to other user
+        if (otherSocketId) {
+          io.to(otherSocketId).emit('messagePositionUpdate', positionUpdate);
+        }
+
+        // Echo back to sender for confirmation (client prediction reconciliation)
+        socket.emit('messagePositionUpdate', positionUpdate);
+
+        if (data._debug) {
+          console.log(`📍 Position update: ${messageId} -> (${positionX}, ${positionY}) by ${socket.userId}`);
+        }
+
+      } catch (error) {
+        console.error('Error handling position update:', error);
+        socket.emit('error', { message: 'Failed to update message position' });
+      }
+    });
+
 
     // Handle disconnect
     socket.on("disconnect", async () => {

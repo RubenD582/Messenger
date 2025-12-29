@@ -5,7 +5,10 @@ import 'package:path/path.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:client/models/message.dart';
+import 'package:client/config/api_config.dart';
+import 'package:client/services/auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 
 class MessageDatabase {
   static Database? _database;
@@ -41,7 +44,7 @@ class MessageDatabase {
     return await openDatabase(
       path,
       password: password,
-      version: 3,
+      version: 5,
       onCreate: _createTables,
       onUpgrade: _onUpgrade,
     );
@@ -128,6 +131,13 @@ class MessageDatabase {
         deleted_at TEXT,
         deleted_by TEXT,
         created_at INTEGER DEFAULT (strftime('%s', 'now')),
+        position_x REAL,
+        position_y REAL,
+        is_positioned INTEGER DEFAULT 0,
+        positioned_by TEXT,
+        positioned_at TEXT,
+        rotation REAL,
+        scale REAL,
 
         UNIQUE(conversation_id, sequence_id)
       )
@@ -190,6 +200,47 @@ class MessageDatabase {
         ADD COLUMN deleted_by TEXT
       ''');
     }
+
+    if (oldVersion < 4) {
+      // Add position columns for interactive message placement
+      await db.execute('''
+        ALTER TABLE $TABLE_MESSAGES
+        ADD COLUMN position_x REAL
+      ''');
+
+      await db.execute('''
+        ALTER TABLE $TABLE_MESSAGES
+        ADD COLUMN position_y REAL
+      ''');
+
+      await db.execute('''
+        ALTER TABLE $TABLE_MESSAGES
+        ADD COLUMN is_positioned INTEGER DEFAULT 0
+      ''');
+
+      await db.execute('''
+        ALTER TABLE $TABLE_MESSAGES
+        ADD COLUMN positioned_by TEXT
+      ''');
+
+      await db.execute('''
+        ALTER TABLE $TABLE_MESSAGES
+        ADD COLUMN positioned_at TEXT
+      ''');
+    }
+
+    if (oldVersion < 5) {
+      // Add rotation and scale columns for message transforms
+      await db.execute('''
+        ALTER TABLE $TABLE_MESSAGES
+        ADD COLUMN rotation REAL
+      ''');
+
+      await db.execute('''
+        ALTER TABLE $TABLE_MESSAGES
+        ADD COLUMN scale REAL
+      ''');
+    }
   }
 
   // Encrypt message content
@@ -226,6 +277,13 @@ class MessageDatabase {
         'metadata': message.metadata != null ? jsonEncode(message.metadata) : null,
         'is_read': message.isRead ? 1 : 0,
         'delivered_at': message.deliveredAt,
+        'position_x': message.positionX,
+        'position_y': message.positionY,
+        'is_positioned': message.isPositioned ? 1 : 0,
+        'positioned_by': message.positionedBy,
+        'positioned_at': message.positionedAt,
+        'rotation': message.rotation,
+        'scale': message.scale,
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
@@ -254,6 +312,13 @@ class MessageDatabase {
           'metadata': message.metadata != null ? jsonEncode(message.metadata) : null,
           'is_read': message.isRead ? 1 : 0,
           'delivered_at': message.deliveredAt,
+          'position_x': message.positionX,
+          'position_y': message.positionY,
+          'is_positioned': message.isPositioned ? 1 : 0,
+          'positioned_by': message.positionedBy,
+          'positioned_at': message.positionedAt,
+          'rotation': message.rotation,
+          'scale': message.scale,
         },
         conflictAlgorithm: ConflictAlgorithm.ignore,
       );
@@ -375,11 +440,15 @@ class MessageDatabase {
 
   // Soft delete entire conversation (WhatsApp/Discord style)
   // Marks messages as deleted instead of removing them permanently
-  static Future<void> deleteConversation(String conversationId, {String? userId}) async {
+  static Future<void> deleteConversation(
+    String conversationId, {
+    String? userId,
+    bool skipServerCall = false, // Set to true when triggered by system message
+  }) async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
 
-    // Soft delete all messages in the conversation (WhatsApp Android style)
+    // Soft delete all messages in the conversation locally (WhatsApp Android style)
     await db.update(
       TABLE_MESSAGES,
       {
@@ -402,6 +471,44 @@ class MessageDatabase {
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
+
+    // CRITICAL: Also delete on server to prevent messages from coming back
+    // Snapchat-style: Deletes for BOTH users and creates system message
+    // SKIP if this is triggered by a system message (to avoid infinite loop)
+    if (!skipServerCall) {
+      try {
+        final token = await AuthService.getToken();
+        // Note: Server will use user's name from database if needed
+
+        if (token != null) {
+          final response = await http.delete(
+            Uri.parse('${ApiConfig.baseUrl}/messages/conversation/$conversationId'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+            body: json.encode({
+              'userName': userId, // Server will look up the actual name
+            }),
+          );
+
+          if (response.statusCode == 200) {
+            if (kDebugMode) {
+              print('✅ Conversation deleted on server: $conversationId');
+            }
+          } else {
+            if (kDebugMode) {
+              print('⚠️ Failed to delete conversation on server: ${response.statusCode}');
+            }
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('❌ Error deleting conversation on server: $e');
+        }
+        // Continue anyway - local deletion succeeded
+      }
+    }
   }
 
   // Hard delete conversation (permanent removal, like WhatsApp iPhone VACUUM)
@@ -598,6 +705,13 @@ class MessageDatabase {
       metadata: map['metadata'] != null ? jsonDecode(map['metadata']) : null,
       isRead: map['is_read'] == 1,
       deliveredAt: map['delivered_at'],
+      positionX: map['position_x'] as double?,
+      positionY: map['position_y'] as double?,
+      isPositioned: (map['is_positioned'] as int? ?? 0) == 1,
+      positionedBy: map['positioned_by'] as String?,
+      positionedAt: map['positioned_at'] as String?,
+      rotation: map['rotation'] as double?,
+      scale: map['scale'] as double?,
     );
   }
 

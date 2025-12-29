@@ -3,7 +3,6 @@ import 'dart:ui';
 
 import 'package:client/screens/requests.dart';
 import 'package:client/screens/chat_screen.dart';
-import 'package:client/database/message_database.dart';
 import 'search.dart';
 import 'package:client/services/api_service.dart';
 import 'package:client/services/auth.dart';
@@ -411,55 +410,37 @@ class _HomeState extends State<Home> {
           String profilePicture = 'assets/noprofile.png';
       
           return Dismissible(
-            key: Key(user['friend_id'].toString()), // Unique key for each item
-            direction: DismissDirection.endToStart, // Only allow right-to-left swipe for delete
-            confirmDismiss: (direction) async {
+            key: Key(user['id'].toString()), // Unique key for each item
+            direction: DismissDirection.horizontal, // Allow swiping in both directions
+            onDismissed: (direction) {
               if (direction == DismissDirection.endToStart) {
-                // Show confirmation dialog before deleting
-                final friendName = '${user['first_name']} ${user['last_name']}';
-                final shouldDelete = await _showDeleteConfirmation(context, friendName);
-
-                if (shouldDelete) {
-                  // Delete messages from local storage
-                  final conversationId = _getConversationId(uuid, user['friend_id']);
-                  await _deleteChat(conversationId, index);
-                }
-
-                // Return false to prevent dismissing the item (keep friend in list)
-                return false;
+                // Delete action
+                // deleteRequest(user['id']);
+              } else if (direction == DismissDirection.startToEnd) {
+                // Pin action
+                // pinUser(user['id']);
               }
-              return false;
             },
       
-            /// **Right Swipe (Delete)**
+            /// **Left Swipe (Delete)**
             background: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.red.shade600, Colors.red.shade800],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                ),
+              color: Colors.blue, // Pin action background
+              alignment: Alignment.centerLeft,
+              padding: EdgeInsets.only(left: 20),
+              child: Icon(
+                Icons.push_pin, // Pin icon
+                color: Colors.white,
               ),
+            ),
+      
+            /// **Right Swipe (Pin)**
+            secondaryBackground: Container(
+              color: Colors.red, // Delete action background
               alignment: Alignment.centerRight,
               padding: EdgeInsets.only(right: 20),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.delete_outline,
-                    color: Colors.white,
-                    size: 28,
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'Delete',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
+              child: Icon(
+                Icons.delete, // Trash icon
+                color: Colors.white,
               ),
             ),
       
@@ -528,71 +509,6 @@ class _HomeState extends State<Home> {
   String _getConversationId(String userId1, String userId2) {
     final sorted = [userId1, userId2]..sort();
     return '${sorted[0]}_${sorted[1]}';
-  }
-
-  // Show confirmation dialog before deleting chat
-  Future<bool> _showDeleteConfirmation(BuildContext context, String friendName) async {
-    return await showCupertinoDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return CupertinoAlertDialog(
-          title: Text('Delete Chat'),
-          content: Text('Delete all messages with $friendName from local storage? This will clear the conversation history on your device only.'),
-          actions: [
-            CupertinoDialogAction(
-              child: Text('Cancel'),
-              onPressed: () {
-                Navigator.of(context).pop(false);
-              },
-            ),
-            CupertinoDialogAction(
-              isDestructiveAction: true,
-              child: Text('Delete Messages'),
-              onPressed: () {
-                Navigator.of(context).pop(true);
-              },
-            ),
-          ],
-        );
-      },
-    ) ?? false;
-  }
-
-  // Delete chat conversation (messages only, keeps friend in list)
-  Future<void> _deleteChat(String conversationId, int index) async {
-    try {
-      // Delete all messages from local database
-      await MessageDatabase.deleteConversation(conversationId);
-
-      if (kDebugMode) {
-        print('Deleted all messages for conversation: $conversationId');
-      }
-
-      // Show confirmation snackbar
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Chat messages deleted from local storage'),
-            backgroundColor: Colors.black87,
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (error) {
-      if (kDebugMode) {
-        print('Error deleting chat: $error');
-      }
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to delete chat'),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
-    }
   }
 
   // Updated chip function with single selection handling

@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:client/config/api_config.dart';
+import 'package:client/database/message_database.dart';
 import 'package:client/models/message.dart';
 import 'package:client/services/auth.dart';
 import 'package:client/services/api_service.dart';
 import 'package:http/http.dart' as http;
 
 class ChatService {
-  final String baseUrl = 'http://localhost:3000';
+  final String baseUrl = ApiConfig.baseUrl;
   final ApiService _apiService;
 
   String? _conversationId;
@@ -16,15 +18,18 @@ class ChatService {
   final StreamController<Message> _messageController = StreamController<Message>.broadcast();
   final StreamController<Map<String, dynamic>> _typingController = StreamController<Map<String, dynamic>>.broadcast();
   final StreamController<Map<String, dynamic>> _readReceiptController = StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<Map<String, dynamic>> _positionUpdateController = StreamController<Map<String, dynamic>>.broadcast();
 
   Stream<Message> get messageStream => _messageController.stream;
   Stream<Map<String, dynamic>> get typingStream => _typingController.stream;
   Stream<Map<String, dynamic>> get readReceiptStream => _readReceiptController.stream;
+  Stream<Map<String, dynamic>> get positionUpdateStream => _positionUpdateController.stream;
 
   Timer? _typingTimer;
   StreamSubscription? _messageSubscription;
   StreamSubscription? _typingSubscription;
   StreamSubscription? _readReceiptSubscription;
+  StreamSubscription? _positionUpdateSubscription;
 
   ChatService(this._apiService);
 
@@ -51,10 +56,57 @@ class ChatService {
         handleReadReceipt(data);
       }
     });
+
+    _positionUpdateSubscription = _apiService.positionUpdateStream.listen((data) {
+      if (data['conversationId'] == _conversationId) {
+        handlePositionUpdate(data);
+      }
+    });
   }
 
   // Send a message via REST API
-  Future<Map<String, dynamic>> sendMessage(String text) async {
+  Future<Map<String, dynamic>> sendMessage(String text, {String? messageType, Map<String, dynamic>? metadata}) async {
+    final token = await AuthService.getToken();
+
+    try {
+      final Map<String, dynamic> body = {
+        'receiverId': _friendId,
+        'message': text,
+        'messageType': messageType ?? 'text',
+      };
+
+      // Add metadata if provided
+      if (metadata != null) {
+        body['metadata'] = metadata;
+      }
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/messages/send'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode(body),
+      );
+
+      if (response.statusCode == 202) {
+        return json.decode(response.body);
+      } else {
+        throw Exception('Failed to send message: ${response.statusCode}');
+      }
+    } catch (error) {
+      print('Error sending message: $error');
+      rethrow;
+    }
+  }
+
+  // Send a drawing message via REST API
+  Future<Map<String, dynamic>> sendDrawingMessage({
+    required String receiverId,
+    required Map<String, dynamic> metadata,
+    required double positionX,
+    required double positionY,
+  }) async {
     final token = await AuthService.getToken();
 
     try {
@@ -65,19 +117,23 @@ class ChatService {
           'Content-Type': 'application/json',
         },
         body: json.encode({
-          'receiverId': _friendId,
-          'message': text,
-          'messageType': 'text',
+          'receiverId': receiverId,
+          'message': 'Drawing',
+          'messageType': 'drawing',
+          'metadata': metadata,
+          'positionX': positionX,
+          'positionY': positionY,
+          'isPositioned': true,
         }),
       );
 
       if (response.statusCode == 202) {
         return json.decode(response.body);
       } else {
-        throw Exception('Failed to send message: ${response.statusCode}');
+        throw Exception('Failed to send drawing: ${response.statusCode}');
       }
     } catch (error) {
-      print('Error sending message: $error');
+      print('Error sending drawing: $error');
       rethrow;
     }
   }
@@ -164,9 +220,22 @@ class ChatService {
   }
 
   // Handle incoming message from WebSocket
-  void handleNewMessage(Map<String, dynamic> data) {
+  void handleNewMessage(Map<String, dynamic> data) async {
     try {
       final message = Message.fromJson(data);
+
+      // If this is a "chat cleared" system message, delete all local messages first
+      if (message.messageType == 'system' &&
+          message.metadata?['action'] == 'chat_cleared') {
+        // Clear all local messages for this conversation
+        // IMPORTANT: Skip server call to avoid infinite loop
+        await MessageDatabase.deleteConversation(
+          _conversationId!,
+          skipServerCall: true,
+        );
+        print('🗑️ Conversation cleared locally due to system message');
+      }
+
       _messageController.add(message);
     } catch (error) {
       print('Error handling new message: $error');
@@ -181,6 +250,11 @@ class ChatService {
   // Handle read receipt from WebSocket
   void handleReadReceipt(Map<String, dynamic> data) {
     _readReceiptController.add(data);
+  }
+
+  // Handle position update from WebSocket
+  void handlePositionUpdate(Map<String, dynamic> data) {
+    _positionUpdateController.add(data);
   }
 
   // Send typing indicator via socket
@@ -198,13 +272,37 @@ class ChatService {
     }
   }
 
+  // Send message position update via socket
+  void sendMessagePositionUpdate({
+    required String messageId,
+    required double positionX,
+    required double positionY,
+    required bool isPositioned,
+    double? rotation,
+    double? scale,
+  }) {
+    if (_conversationId != null) {
+      _apiService.sendMessagePositionUpdate(
+        messageId: messageId,
+        conversationId: _conversationId!,
+        positionX: positionX,
+        positionY: positionY,
+        isPositioned: isPositioned,
+        rotation: rotation,
+        scale: scale,
+      );
+    }
+  }
+
   void dispose() {
     _messageSubscription?.cancel();
     _typingSubscription?.cancel();
     _readReceiptSubscription?.cancel();
+    _positionUpdateSubscription?.cancel();
     _messageController.close();
     _typingController.close();
     _readReceiptController.close();
+    _positionUpdateController.close();
     _typingTimer?.cancel();
   }
 }
