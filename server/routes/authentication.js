@@ -7,47 +7,24 @@ const fs = require("fs");
 const path = require("path");
 const rateLimit = require("express-rate-limit");
 const Joi = require('joi');
-const Redis = require('redis');
+const redisClient = require("../config/redisClient"); // Import the shared Redis client
 const cors = require("cors");
 const winston = require("winston");
-const { clerkClient } = require("@clerk/backend");
-const router = express.Router();
+const router = express.Router(); // Re-adding the router definition
 const { authenticateToken } = require("../middleware/authMiddleware");
-const { authenticateClerkToken, revokeSession } = require("../middleware/clerkMiddleware");
 
 // Load private and public keys for JWT signing and verification
 const privateKey = fs.readFileSync(path.join(__dirname, "../../config/keys/private_key.pem"), "utf8");
 const publicKey = fs.readFileSync(path.join(__dirname, "../../config/keys/public_key.pem"), "utf8");
 
-// Create Redis client for rate limiting and token blacklist
-const redisClient = Redis.createClient({
-  socket: {
-    host: process.env.REDIS_HOST || 'localhost',
-    port: process.env.REDIS_PORT || 6380,
-  }
+
+// Username schema validation (minimum 3 characters)
+const usernameSchema = Joi.string().min(3).required().messages({
+  'string.base': '"Username" should be a type of text',
+  'string.min': '"Username" should have a minimum length of {#limit} characters',
+  'string.empty': '"Username" cannot be empty',
+  'any.required': '"Username" is required',
 });
-
-redisClient.connect();
-
-// Handle connection errors
-redisClient.on('error', (err) => {
-  console.log('Redis error:', err);
-});
-
-// User schema validation with Joi (including alphanumeric + _ and .)
-const usernameSchema = Joi.string()
-  .pattern(/^[a-zA-Z0-9_.]+$/) // Allow alphanumeric, _ and .
-  .min(3)
-  .max(20)
-  .required()
-  .messages({
-    'string.base': '"Username" should be a type of text',
-    'string.pattern.base': '"Username" can only contain alphanumeric characters, underscores, and periods',
-    'string.min': '"Username" should have a minimum length of {#limit} characters',
-    'string.max': '"Username" should have a maximum length of {#limit} characters',
-    'string.empty': '"Username" cannot be empty',
-    'any.required': '"Username" is required',
-  });
 
 // Password schema validation (minimum 8 characters)
 const passwordSchema = Joi.string().min(8).required().messages({
@@ -179,25 +156,20 @@ router.post("/refresh-token", authenticateToken, async (req, res) => {
     const decoded = jwt.verify(refreshToken, publicKey, { algorithms: ["RS256"] });
 
     // Check if the refresh token is blacklisted
-    redisClient.sIsMember("blacklisted_tokens", refreshToken, (err, reply) => {
-      if (err) {
-        logger.error("Redis error:", err);
-        return res.status(500).json({ message: "Server error" });
-      }
+    const reply = await redisClient.sIsMember("blacklisted_tokens", refreshToken);
+    
+    if (reply === 1) {
+      return res.status(403).json({ message: "Refresh token is blacklisted" });
+    }
 
-      if (reply === 1) {
-        return res.status(403).json({ message: "Refresh token is blacklisted" });
-      }
+    // Issue a new access token
+    const newToken = jwt.sign(
+      { username: decoded.username, userId: decoded.userId },
+      privateKey,
+      { algorithm: "RS256", expiresIn: "1h" }
+    );
 
-      // Issue a new access token
-      const newToken = jwt.sign(
-        { username: decoded.username, userId: decoded.userId },
-        privateKey,
-        { algorithm: "RS256", expiresIn: "1h" }
-      );
-
-      res.json({ token: newToken });
-    });
+    res.json({ token: newToken });
   } catch (error) {
     logger.error("Error during refresh token:", error);
     res.status(403).json({ message: "Invalid refresh token" });
@@ -219,7 +191,6 @@ router.post("/logout", authenticateToken, async (req, res) => {
       // The token already exists in the set
       return res.status(200).json({ message: "Token already blacklisted" });
     }
-
     res.json({ message: "Logged out successfully" });
   } catch (error) {
     logger.error("Error during logout:", error);
@@ -233,14 +204,17 @@ router.get("/", (req, res) => {
 });
 
 // ===========================================
-// CLERK AUTHENTICATION ENDPOINTS
+// OTP-BASED AUTHENTICATION ENDPOINTS
 // ===========================================
 
+const otpService = require("../services/otpService");
+const emailService = require("../services/emailService");
+
 /**
- * POST /auth/clerk-signup
- * Create a new user account with Clerk
+ * POST /auth/register-with-email
+ * Register a new user with email and send OTP for verification
  */
-router.post("/clerk-signup", async (req, res) => {
+router.post("/register-with-email", loginRegisterLimiter, async (req, res) => {
   const { email, password, firstName, lastName } = req.body;
 
   try {
@@ -249,43 +223,148 @@ router.post("/clerk-signup", async (req, res) => {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // Create user in Clerk
-    const user = await clerkClient.users.createUser({
-      emailAddress: [email],
-      password,
-      firstName,
-      lastName,
-      skipPasswordRequirement: false,
-      skipPasswordChecks: false,
-    });
-
-    logger.info(`User created in Clerk: ${user.id} (${email})`);
-
-    // User will be synced to PostgreSQL via webhook
-    // Return success with user ID
-    res.status(201).json({
-      success: true,
-      message: "Account created successfully",
-      userId: user.id,
-    });
-  } catch (error) {
-    logger.error("Error in /auth/clerk-signup:", error);
-
-    // Handle specific Clerk errors
-    if (error.message && error.message.includes("already exists")) {
-      return res.status(400).json({ message: "Email already in use" });
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: "Invalid email format" });
     }
 
-    res.status(500).json({ message: "Failed to create account" });
+    // Validate password
+    const { error: passwordError } = passwordSchema.validate(password);
+    if (passwordError) {
+      return res.status(400).json({ message: passwordError.details[0].message });
+    }
+
+    // Check if email already exists
+    const existingUser = await db.query("SELECT * FROM users WHERE email = $1", [email]);
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({ message: "Email already registered" });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    // Generate OTP
+    const otp = otpService.generateOTP();
+
+    // Store OTP in Redis
+    const storeResult = await otpService.storeOTP(email, otp, 'registration');
+    if (!storeResult.success) {
+      return res.status(429).json({ message: storeResult.error });
+    }
+
+    // Send OTP via email
+    const emailResult = await emailService.sendOTP(email, otp, 'registration');
+    if (!emailResult.success) {
+      return res.status(500).json({ message: "Failed to send verification email" });
+    }
+
+    // Store user data temporarily in Redis (with OTP) for 10 minutes
+    // This prevents creating unverified users in the database
+    const tempUserData = {
+      email,
+      password: hashedPassword,
+      firstName,
+      lastName,
+    };
+    await redisClient.set(
+      `temp:user:${email}`,
+      JSON.stringify(tempUserData),
+      'EX',
+      10 * 60 // 10 minutes
+    );
+
+    logger.info(`Registration OTP sent to: ${email}`);
+
+    res.status(200).json({
+      success: true,
+      message: "Verification code sent to your email",
+      email: email,
+      devMode: emailResult.devMode || false,
+    });
+  } catch (error) {
+    logger.error("Error in /auth/register-with-email:", error);
+    res.status(500).json({ message: "Registration failed" });
   }
 });
 
 /**
- * POST /auth/clerk-signin
- * Sign in with email and password
+ * POST /auth/verify-email
+ * Verify email with OTP and create user account
  */
-router.post("/clerk-signin", async (req, res) => {
-  const { email, password } = req.body;
+router.post("/verify-email", async (req, res) => {
+  const { email, otp } = req.body;
+
+  try {
+    // Validate input
+    if (!email || !otp) {
+      return res.status(400).json({ message: "Email and verification code are required" });
+    }
+
+    // Verify OTP
+    const verifyResult = await otpService.verifyOTP(email, otp, 'registration');
+    if (!verifyResult.success) {
+      return res.status(400).json({ message: verifyResult.error });
+    }
+
+    // Get temporary user data from Redis
+    const tempUserDataJson = await redisClient.get(`temp:user:${email}`);
+    if (!tempUserDataJson) {
+      return res.status(400).json({ message: "Registration session expired. Please register again." });
+    }
+
+    const tempUserData = JSON.parse(tempUserDataJson);
+
+    // Create user in database
+    const result = await db.query(
+      "INSERT INTO users (email, password, first_name, last_name, email_verified) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, first_name, last_name",
+      [tempUserData.email, tempUserData.password, tempUserData.firstName, tempUserData.lastName, true]
+    );
+
+    const user = result.rows[0];
+
+    // Delete temporary user data from Redis
+    await redisClient.del(`temp:user:${email}`);
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { email: user.email, userId: user.id },
+      privateKey,
+      { algorithm: "RS256", expiresIn: "1h" }
+    );
+
+    // Store JWT in HttpOnly cookie
+    res.cookie("access_token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "Strict",
+    });
+
+    logger.info(`Email verified and user created: ${email}`);
+
+    res.status(201).json({
+      success: true,
+      message: "Email verified successfully",
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+      },
+      token: token,
+    });
+  } catch (error) {
+    logger.error("Error in /auth/verify-email:", error);
+    res.status(500).json({ message: "Email verification failed" });
+  }
+});
+
+/**
+ * POST /auth/login-with-email
+ * Login with email/password and optionally send OTP for 2FA
+ */
+router.post("/login-with-email", loginRegisterLimiter, async (req, res) => {
+  const { email, password, use2FA } = req.body;
 
   try {
     // Validate input
@@ -293,67 +372,179 @@ router.post("/clerk-signin", async (req, res) => {
       return res.status(400).json({ message: "Email and password are required" });
     }
 
-    // Note: Clerk doesn't have a direct "sign in" endpoint in the backend SDK
-    // The sign-in flow should happen client-side using Clerk's Frontend API
-    // This endpoint is a placeholder - the client should use Clerk's sign-in flow
+    // Check if user exists
+    const result = await db.query("SELECT * FROM users WHERE email = $1", [email]);
+    if (result.rows.length === 0) {
+      return res.status(400).json({ message: "Invalid email or password" });
+    }
 
-    res.status(501).json({
-      message: "Sign in should be handled client-side with Clerk SDK"
+    const user = result.rows[0];
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(400).json({ message: "Invalid email or password" });
+    }
+
+    // Check if email is verified
+    if (!user.email_verified) {
+      return res.status(403).json({ message: "Please verify your email before logging in" });
+    }
+
+    // If 2FA is requested, send OTP
+    if (use2FA) {
+      const otp = otpService.generateOTP();
+      const storeResult = await otpService.storeOTP(email, otp, '2fa');
+
+      if (!storeResult.success) {
+        return res.status(429).json({ message: storeResult.error });
+      }
+
+      const emailResult = await emailService.sendOTP(email, otp, '2fa');
+      if (!emailResult.success) {
+        return res.status(500).json({ message: "Failed to send 2FA code" });
+      }
+
+      return res.status(200).json({
+        success: true,
+        requires2FA: true,
+        message: "2FA code sent to your email",
+        email: email,
+      });
+    }
+
+    // No 2FA - issue token directly
+    const token = jwt.sign(
+      { email: user.email, userId: user.id },
+      privateKey,
+      { algorithm: "RS256", expiresIn: "1h" }
+    );
+
+    // Store JWT in HttpOnly cookie
+    res.cookie("access_token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "Strict",
+    });
+
+    // Update last_login timestamp
+    await db.query("UPDATE users SET last_login = NOW() WHERE id = $1", [user.id]);
+
+    logger.info(`User logged in: ${email}`);
+
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        firstName: user.first_name,
+        lastName: user.last_name,
+      },
+      token: token,
     });
   } catch (error) {
-    logger.error("Error in /auth/clerk-signin:", error);
-    res.status(500).json({ message: "Sign in failed" });
+    logger.error("Error in /auth/login-with-email:", error);
+    res.status(500).json({ message: "Login failed" });
+  }
+});
+
+/**
+ * POST /auth/verify-2fa
+ * Verify 2FA code and issue JWT token
+ */
+router.post("/verify-2fa", async (req, res) => {
+  const { email, otp } = req.body;
+
+  try {
+    // Validate input
+    if (!email || !otp) {
+      return res.status(400).json({ message: "Email and 2FA code are required" });
+    }
+
+    // Verify OTP
+    const verifyResult = await otpService.verifyOTP(email, otp, '2fa');
+    if (!verifyResult.success) {
+      return res.status(400).json({ message: verifyResult.error });
+    }
+
+    // Get user from database
+    const result = await db.query("SELECT * FROM users WHERE email = $1", [email]);
+    if (result.rows.length === 0) {
+      return res.status(400).json({ message: "User not found" });
+    }
+
+    const user = result.rows[0];
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { email: user.email, userId: user.id },
+      privateKey,
+      { algorithm: "RS256", expiresIn: "1h" }
+    );
+
+    // Store JWT in HttpOnly cookie
+    res.cookie("access_token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "Strict",
+    });
+
+    // Update last_login timestamp
+    await db.query("UPDATE users SET last_login = NOW() WHERE id = $1", [user.id]);
+
+    logger.info(`2FA verified and user logged in: ${email}`);
+
+    res.json({
+      success: true,
+      message: "2FA verified successfully",
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        firstName: user.first_name,
+        lastName: user.last_name,
+      },
+      token: token,
+    });
+  } catch (error) {
+    logger.error("Error in /auth/verify-2fa:", error);
+    res.status(500).json({ message: "2FA verification failed" });
   }
 });
 
 /**
  * GET /auth/me
- * Verify Clerk session and return current user info
- * Protected by Clerk authentication middleware
+ * Get current authenticated user info
+ * Protected by JWT authentication middleware
  */
-router.get("/me", authenticateClerkToken, async (req, res) => {
+router.get("/me", authenticateToken, async (req, res) => {
   try {
-    // User info is attached to req by authenticateClerkToken middleware
+    const result = await db.query(
+      "SELECT id, email, username, first_name, last_name, email_verified, last_login FROM users WHERE id = $1",
+      [req.user.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const user = result.rows[0];
+
     res.json({
       user: {
-        id: req.user.id,
-        email: req.user.email,
-        username: req.user.username,
-        firstName: req.user.firstName,
-        lastName: req.user.lastName,
-        clerkUserId: req.user.clerkUserId,
+        id: user.id,
+        email: user.email,
+        username: user.username,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        emailVerified: user.email_verified,
+        lastLogin: user.last_login,
       },
       authenticated: true,
     });
   } catch (error) {
     logger.error("Error in /auth/me endpoint:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-/**
- * POST /auth/clerk-logout
- * Revoke Clerk session and mark as inactive in database
- * Protected by Clerk authentication middleware
- */
-router.post("/clerk-logout", authenticateClerkToken, async (req, res) => {
-  try {
-    const clerkSessionId = req.clerkSessionId;
-
-    if (!clerkSessionId) {
-      return res.status(400).json({ message: "No session to revoke" });
-    }
-
-    // Revoke the session using helper function
-    const revoked = await revokeSession(clerkSessionId);
-
-    if (revoked) {
-      res.json({ message: "Logged out successfully" });
-    } else {
-      res.status(500).json({ message: "Failed to revoke session" });
-    }
-  } catch (error) {
-    logger.error("Error in /auth/clerk-logout endpoint:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
