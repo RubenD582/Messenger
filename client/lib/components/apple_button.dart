@@ -101,7 +101,7 @@ class _AppleButtonState extends State<AppleButton> with SingleTickerProviderStat
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeInOut,
-              height: 54,
+              height: 45,
               decoration: BoxDecoration(
                 color: isDisabled
                     ? _buttonColor.withOpacity(0.5)
@@ -126,7 +126,7 @@ class _AppleButtonState extends State<AppleButton> with SingleTickerProviderStat
                     : Text(
                         widget.text,
                         style: TextStyle(
-                          fontSize: 17,
+                          fontSize: 14,
                           fontWeight: FontWeight.w600,
                           color: isDisabled
                               ? _textColor.withOpacity(0.5)

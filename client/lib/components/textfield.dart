@@ -53,20 +53,20 @@ class _CustomCupertinoTextFieldState extends State<CustomCupertinoTextField> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (widget.label != null) ...[
-          Padding(
-            padding: const EdgeInsets.only(left: 4, bottom: 8),
-            child: Text(
-              widget.label!,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.2,
-              ),
-            ),
-          ),
-        ],
+        // if (widget.label != null) ...[
+        //   Padding(
+        //     padding: const EdgeInsets.only(left: 4, bottom: 8),
+        //     child: Text(
+        //       widget.label!,
+        //       style: const TextStyle(
+        //         color: AppColors.textPrimary,
+        //         fontSize: 14,
+        //         fontWeight: FontWeight.w600,
+        //         letterSpacing: 0.2,
+        //       ),
+        //     ),
+        //   ),
+        // ],
         AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           decoration: BoxDecoration(
@@ -89,16 +89,16 @@ class _CustomCupertinoTextFieldState extends State<CustomCupertinoTextField> {
                   keyboardType: widget.keyboardType,
                   style: const TextStyle(
                     color: AppColors.textPrimary,
-                    fontSize: 16,
+                    fontSize: 14,
                     fontWeight: FontWeight.w400,
                   ),
                   placeholder: widget.hintText,
                   placeholderStyle: const TextStyle(
                     color: AppColors.textTertiary,
-                    fontSize: 16,
+                    fontSize: 14,
                   ),
                   padding: const EdgeInsets.symmetric(
-                    vertical: 16,
+                    vertical: 12,
                     horizontal: 16,
                   ),
                   cursorColor: AppColors.primary,

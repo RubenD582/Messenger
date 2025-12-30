@@ -53,3 +53,11 @@
 {"level":"info","message":"OTP deleted for rdreyer523@gmail.com","timestamp":"2025-12-30T12:02:03.826Z"}
 {"level":"info","message":"OTP verified successfully for rdreyer523@gmail.com","timestamp":"2025-12-30T12:02:03.827Z"}
 {"level":"info","message":"2FA verified and user logged in: rdreyer523@gmail.com","timestamp":"2025-12-30T12:02:03.845Z"}
+{"level":"info","message":"OTP generated (not logged for security)","timestamp":"2025-12-30T12:30:20.099Z"}
+{"level":"info","message":"OTP stored for rubendreyer14@gmail.com with purpose: registration","timestamp":"2025-12-30T12:30:20.104Z"}
+{"level":"info","message":"OTP email sent to rubendreyer14@gmail.com: <14886c3b-16ca-65bc-5431-12f343ec2d72@messenger.app>","timestamp":"2025-12-30T12:30:24.474Z"}
+{"level":"info","message":"Registration OTP sent to: rubendreyer14@gmail.com","timestamp":"2025-12-30T12:30:24.477Z"}
+{"level":"info","message":"OTP generated (not logged for security)","timestamp":"2025-12-30T12:44:10.248Z"}
+{"level":"info","message":"OTP stored for rubendreyer14@gmail.com with purpose: registration","timestamp":"2025-12-30T12:44:10.254Z"}
+{"level":"info","message":"OTP email sent to rubendreyer14@gmail.com: <b686c58e-5ca6-df7e-36cf-175afd7ba920@messenger.app>","timestamp":"2025-12-30T12:44:13.359Z"}
+{"level":"info","message":"Registration OTP sent to: rubendreyer14@gmail.com","timestamp":"2025-12-30T12:44:13.361Z"}

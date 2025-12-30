@@ -56,6 +56,15 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        title: const Text(
+          'Verify Your Email',
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
           onPressed: () => Navigator.of(context).pop(),
@@ -68,12 +77,12 @@ class _EmailVerificationScreenState extends State<EmailVerificationScreen> {
             mainAxisAlignment: MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 60.0),
+              // const SizedBox(height: 60.0), // Removed as title is now in AppBar
 
-              Text(
-                'Verify Your Email',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
+              // Text(
+              //   'Verify Your Email',
+              //   style: Theme.of(context).textTheme.headlineSmall,
+              // ),
 
               const SizedBox(height: 8),
 

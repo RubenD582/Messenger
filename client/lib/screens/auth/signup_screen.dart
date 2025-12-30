@@ -32,8 +32,30 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final AuthService _authService = AuthService();
   bool _isLoading = false;
 
+  String _currentPageTitle = "What's your name?"; // Initialize with the first step's title
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController.addListener(_updatePageTitle);
+  }
+
+  void _updatePageTitle() {
+    if (_pageController.page == null) return;
+    setState(() {
+      if (_pageController.page! < 0.5) {
+        _currentPageTitle = "What's your name?";
+      } else if (_pageController.page! < 1.5) {
+        _currentPageTitle = "What's your email?";
+      } else {
+        _currentPageTitle = "Create a password";
+      }
+    });
+  }
+
   @override
   void dispose() {
+    _pageController.removeListener(_updatePageTitle);
     _pageController.dispose();
     _firstNameController.dispose();
     _lastNameController.dispose();
@@ -95,8 +117,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        title: Text(
+          _currentPageTitle,
+          style: const TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new,
+          icon: const Icon(Icons.arrow_back, // Changed from Icons.arrow_back_ios_new
             color: AppColors.textPrimary,
             size: 20,
           ),
@@ -117,7 +148,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
         physics: const NeverScrollableScrollPhysics(),
         children: [
           _buildStep(
-            title: "What's your name?",
+            // title: "What's your name?", // Removed
+            description: "To help your friends recognize you.",
             fields: [
               CustomCupertinoTextField(
                 label: 'First Name',
@@ -146,7 +178,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
             },
           ),
           _buildStep(
-            title: "What's your email?",
+            // title: "What's your email?", // Removed
+            description: "You'll use this to sign in.",
             fields: [
               CustomCupertinoTextField(
                 label: 'Email',
@@ -169,7 +202,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
             },
           ),
           _buildStep(
-            title: 'Create a password',
+            // title: 'Create a password', // Removed
+            description: "Make sure it's at least 8 characters long.",
             fields: [
               CustomCupertinoTextField(
                 label: 'Password',
@@ -196,32 +230,36 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Widget _buildStep({
-    required String title,
+    // removed title: required String title,
+    String? description,
     required List<Widget> fields,
     required VoidCallback onNext,
     String buttonText = 'Continue',
   }) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24.0),
+      padding: const EdgeInsets.symmetric(horizontal: 24.0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center, // Centered the whole column
         children: [
-          const SizedBox(height: 20),
+          // const SizedBox(height: 20), // Removed this SizedBox
 
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
+          if (description != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
+              child: Text(
+                description,
+                textAlign: TextAlign.center,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: AppColors.textSecondary),
+              ),
             ),
-          ),
-
-          const SizedBox(height: 32),
+          const SizedBox(height: 48), // Changed back to 48
 
           ...fields,
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 48),
 
           _isLoading
               ? const Center(
