@@ -1,3 +1,6 @@
+const dotenv = require("dotenv");
+dotenv.config(); // Moved to the very top
+
 const express = require("express");
 const http = require("http");
 const socketIo = require("socket.io");
@@ -10,12 +13,8 @@ const messageRoutes = require("./routes/messages");
 const friendSocket = require("./sockets/friendSocket"); // Import the new friend socket
 const webhookRoutes = require("./routes/webhooks"); // Import webhook routes for Clerk
 const db = require("./db");
-const dotenv = require("dotenv");
 const cookieParser = require("cookie-parser");
 const { connectKafka, consumer, producer } = require('./kafkaClient'); // Add producer here
-
-// Load environment variables
-dotenv.config();
 
 const app = express();
 const server = http.createServer(app);

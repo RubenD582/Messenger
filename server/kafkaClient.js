@@ -1,5 +1,5 @@
 // kafkaClient.js
-const { Kafka } = require('kafkajs');
+const { Kafka, Partitioners } = require('kafkajs');
 
 const kafka = new Kafka({
     brokers: [process.env.KAFKA_BROKER || 'localhost:9092'],
@@ -8,7 +8,9 @@ const kafka = new Kafka({
   
 
 // Create shared producer instance
-const producer = kafka.producer();
+const producer = kafka.producer({
+    createPartitioner: Partitioners.LegacyPartitioner,
+});
 
 // Create shared consumer instance for friend events
 const consumer = kafka.consumer({ groupId: 'friend-events-group' });

@@ -1,4 +1,4 @@
-import 'package:client/screens/auth/clerk_sign_in.dart';
+import 'package:client/screens/auth/sign_in_screen.dart';
 import 'package:client/services/notification_service.dart';
 import 'package:client/database/message_database.dart';
 import 'package:client/theme/colors.dart';
@@ -140,7 +140,7 @@ class MyApp extends StatelessWidget {
           ),
         ],
       ),
-      home: const ClerkSignInScreen(),
+      home: const SignInScreen(),
     );
   }
 }

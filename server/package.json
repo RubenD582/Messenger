@@ -17,6 +17,9 @@
   "dependencies": {
     "@clerk/backend": "^2.29.0",
     "@clerk/express": "^1.7.60",
+    "@types/nodemailer": "^7.0.4",
+    "axios": "^1.13.2",
+    "axios-cookiejar-support": "^6.0.5",
     "bcrypt": "^5.1.1",
     "bcryptjs": "^3.0.2",
     "cookie-parser": "^1.4.7",
@@ -31,10 +34,13 @@
     "jsonwebtoken": "^9.0.2",
     "kafkajs": "^2.2.4",
     "knex": "^3.1.0",
+    "nodemailer": "^7.0.12",
+    "otplib": "^12.0.1",
     "pg": "^8.14.0",
     "redis": "^4.7.0",
     "socket.io": "^4.8.1",
     "svix": "^1.82.0",
+    "tough-cookie": "^6.0.0",
     "uuid": "^13.0.0",
     "validator": "^13.12.0",
     "winston": "^3.17.0"
