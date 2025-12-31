@@ -122,11 +122,10 @@ class _MediaPickerModalState extends State<MediaPickerModal> {
 
           const SizedBox(height: 4,),
 
-          // Cupertino Segmented Control for tabs
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0), // Add horizontal padding
+            padding: const EdgeInsets.symmetric(horizontal: 12.0),
             child: SizedBox(
-              width: double.infinity, // Take up full width
+              width: double.infinity,
               child: CupertinoSlidingSegmentedControl<MediaType>(
                 backgroundColor: Colors.grey.shade800,
                 thumbColor: CupertinoColors.systemGrey,

@@ -2887,7 +2887,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         suffixIcon: IconButton(
             icon: Icon(
-              CupertinoIcons.add,
+              CupertinoIcons.search,
               color: Colors.white.withValues(alpha: 0.5),
               size: 24,
             ),

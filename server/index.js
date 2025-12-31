@@ -13,6 +13,7 @@ const friendRoutes = require("./routes/friends");
 const messageRoutes = require("./routes/messages");
 const friendSocket = require("./sockets/friendSocket"); // Import the new friend socket
 const webhookRoutes = require("./routes/webhooks"); // Import webhook routes for Clerk
+const suggestionsRoutes = require('./routes/suggestions'); // Import suggestions route
 const db = require("./db");
 const cookieParser = require("cookie-parser");
 const { connectKafka, consumer, producer } = require('./kafkaClient'); // Add producer here
@@ -51,6 +52,7 @@ app.use(cookieParser());
 app.use("/auth", authRoutes);
 app.use("/friends", friendRoutes);
 app.use("/messages", messageRoutes);
+app.use("/suggestions", suggestionsRoutes); // Use suggestions route
 
 // Serve static files from the Flutter web build directory
 app.use(express.static(path.join(__dirname, '../client/build/web')));
@@ -64,10 +66,13 @@ app.get('*', (req, res) => {
 chatSocket(io);
 friendSocket(io);
 
-// Kafka Connection and Subscription
+const graphService = require('./services/graphService'); // Import graphService
+
+// Kafka and Graph Database Connection and Subscription
 (async () => {
   try {
     await connectKafka();
+    await graphService.connectToGraph(); // Connect to RedisGraph
     
     // Subscribe to topics here if needed
     await consumer.subscribe({ 
@@ -76,9 +81,10 @@ friendSocket(io);
     });
     
     console.log('Kafka connected and subscribed to friend-events');
+    console.log('Graph database connected.');
   } catch (error) {
-    console.error('Failed to connect to Kafka:', error);
-    process.exit(1); // Exit if Kafka connection fails
+    console.error('Failed to connect to services:', error);
+    process.exit(1); // Exit if any essential service connection fails
   }
 })();
 
