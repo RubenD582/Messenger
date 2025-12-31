@@ -8,7 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:http/http.dart' as http;
-import 'auth.dart';
+import 'auth_service.dart';
 
 class ApiService {
   final String baseUrl = ApiConfig.baseUrl;
@@ -50,12 +50,14 @@ class ApiService {
       'auth': (callback) async {
         final token = await AuthService.getToken();
         if (token == null || token.isEmpty) {
-          print('WebSocket: No token available, cannot connect');
+          if (kDebugMode) {
+            print('WebSocket: No token available, cannot connect');
+          }
           callback({'token': ''});
           return;
         }
         if (kDebugMode) {
-          print('WebSocket: Using fresh token for authentication');
+          print('WebSocket: Authenticating with token');
         }
         callback({'token': token});
       },

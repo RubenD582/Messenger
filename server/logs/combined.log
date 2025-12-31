@@ -61,3 +61,77 @@
 {"level":"info","message":"OTP stored for rubendreyer14@gmail.com with purpose: registration","timestamp":"2025-12-30T12:44:10.254Z"}
 {"level":"info","message":"OTP email sent to rubendreyer14@gmail.com: <b686c58e-5ca6-df7e-36cf-175afd7ba920@messenger.app>","timestamp":"2025-12-30T12:44:13.359Z"}
 {"level":"info","message":"Registration OTP sent to: rubendreyer14@gmail.com","timestamp":"2025-12-30T12:44:13.361Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T13:32:33.956Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T13:32:37.968Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T13:32:49.819Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T13:33:03.262Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T13:34:49.934Z"}
+{"level":"info","message":"Password reset email sent to rdreyer523@gmail.com: <c122f28d-935d-780a-e0ee-6b30ef51ce01@messenger.app>","timestamp":"2025-12-30T13:35:08.793Z"}
+{"level":"info","message":"Password reset link sent to: rdreyer523@gmail.com","timestamp":"2025-12-30T13:35:08.793Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T13:39:39.005Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T13:41:16.272Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T13:43:08.026Z"}
+{"level":"info","message":"User logged in: rdreyer523@gmail.com","timestamp":"2025-12-30T14:01:17.770Z"}
+{"level":"info","message":"User logged in: rdreyer523@gmail.com","timestamp":"2025-12-30T16:35:27.309Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T17:44:39.075Z"}
+{"level":"info","message":"User logged in: rdreyer523@gmail.com","timestamp":"2025-12-30T17:57:09.624Z"}
+{"level":"info","message":"OTP generated (not logged for security)","timestamp":"2025-12-30T17:59:21.289Z"}
+{"level":"info","message":"OTP stored for rubendreyer14@gmail.com with purpose: registration","timestamp":"2025-12-30T17:59:21.297Z"}
+{"level":"info","message":"OTP email sent to rubendreyer14@gmail.com: <e3826d42-dccf-309b-2dfb-cfe09b0dc253@messenger.app>","timestamp":"2025-12-30T17:59:24.415Z"}
+{"level":"info","message":"Registration OTP sent to: rubendreyer14@gmail.com","timestamp":"2025-12-30T17:59:24.419Z"}
+{"level":"warn","message":"Invalid OTP attempt for rubendreyer14@gmail.com","timestamp":"2025-12-30T17:59:46.050Z"}
+{"level":"warn","message":"Invalid OTP attempt for rubendreyer14@gmail.com","timestamp":"2025-12-30T17:59:50.761Z"}
+{"level":"info","message":"OTP deleted for rubendreyer14@gmail.com","timestamp":"2025-12-30T18:00:19.182Z"}
+{"level":"info","message":"OTP verified successfully for rubendreyer14@gmail.com","timestamp":"2025-12-30T18:00:19.182Z"}
+{"level":"info","message":"Email verified and user created: rubendreyer14@gmail.com","timestamp":"2025-12-30T18:00:19.206Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T18:11:25.569Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T18:17:38.305Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com","timestamp":"2025-12-30T18:18:37.849Z"}
+{"level":"info","message":"User logged in: rdreyer523@gmail.com","timestamp":"2025-12-30T18:19:44.964Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T18:21:39.413Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T18:24:06.297Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T18:26:10.676Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com","timestamp":"2025-12-30T18:26:35.715Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T18:32:50.088Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com","timestamp":"2025-12-30T18:33:06.958Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T18:36:22.154Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com","timestamp":"2025-12-30T18:36:48.348Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T18:39:46.555Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com","timestamp":"2025-12-30T18:40:03.766Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com","timestamp":"2025-12-30T18:44:21.753Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T18:46:09.845Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com","timestamp":"2025-12-30T18:46:24.415Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T18:50:36.561Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com","timestamp":"2025-12-30T18:52:46.258Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T18:57:01.328Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com","timestamp":"2025-12-30T18:57:18.154Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T19:02:00.454Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com","timestamp":"2025-12-30T19:02:15.422Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T19:09:05.363Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com","timestamp":"2025-12-30T19:09:28.189Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com","timestamp":"2025-12-30T19:13:30.617Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T19:33:56.684Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com","timestamp":"2025-12-30T19:34:15.521Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T20:06:39.281Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com","timestamp":"2025-12-30T20:11:31.476Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T20:16:24.926Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com","timestamp":"2025-12-30T20:16:47.362Z"}
+{"level":"info","message":"User logged in: rdreyer523@gmail.com","timestamp":"2025-12-30T20:17:24.400Z"}
+{"level":"info","message":"User logged in: rdreyer523@gmail.com","timestamp":"2025-12-30T20:17:51.265Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T20:23:26.405Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T20:23:33.542Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T20:25:16.156Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com","timestamp":"2025-12-30T20:25:24.163Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-30T20:29:46.235Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-31T05:19:26.153Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-31T05:19:35.514Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-31T05:19:49.036Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-31T05:20:15.252Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-31T05:20:33.274Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-31T05:20:43.846Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-31T05:20:58.438Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2025-12-31T05:20:58.772Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com from IP: ::ffff:192.168.0.156","timestamp":"2025-12-31T06:13:40.443Z"}
+{"level":"info","message":"User logged in: rdreyer523@gmail.com from IP: ::ffff:192.168.0.154","timestamp":"2025-12-31T06:14:05.848Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com from IP: ::ffff:192.168.0.156","timestamp":"2025-12-31T06:18:56.823Z"}
+{"level":"info","message":"User logged in: rdreyer523@gmail.com from IP: ::ffff:192.168.0.154","timestamp":"2025-12-31T06:19:09.985Z"}

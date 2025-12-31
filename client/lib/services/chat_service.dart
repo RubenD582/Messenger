@@ -3,8 +3,9 @@ import 'dart:convert';
 import 'package:client/config/api_config.dart';
 import 'package:client/database/message_database.dart';
 import 'package:client/models/message.dart';
-import 'package:client/services/auth.dart';
+import 'package:client/services/auth_service.dart';
 import 'package:client/services/api_service.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class ChatService {

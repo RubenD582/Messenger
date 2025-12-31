@@ -6,7 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:client/models/message.dart';
 import 'package:client/config/api_config.dart';
-import 'package:client/services/auth.dart';
+import 'package:client/services/auth_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 

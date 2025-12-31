@@ -5,7 +5,7 @@ import 'package:client/database/message_database.dart';
 import 'package:client/models/message.dart';
 import 'package:client/screens/user_profile.dart';
 import 'package:client/services/api_service.dart';
-import 'package:client/services/auth.dart';
+import 'package:client/services/auth_service.dart';
 import 'package:client/services/chat_service.dart';
 import 'package:client/services/chat_service_with_storage.dart';
 import 'package:client/theme/colors.dart';
@@ -233,7 +233,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
     // Listen for typing indicators
     _chatService.typingStream.listen((typingData) {
-      if (typingData['userId'] == widget.friendId) {
+      if (typingData['userId'] == widget.friendId && mounted) {
         setState(() {
           _isTyping = typingData['isTyping'] ?? false;
         });
@@ -256,13 +256,15 @@ class _ChatScreenState extends State<ChatScreen> {
         }
       }
 
-      setState(() {
-        for (var msg in _messages) {
-          if (msg.sequenceId <= lastReadSeq && msg.senderId == _currentUserId) {
-            msg.isRead = true;
+      if (mounted) {
+        setState(() {
+          for (var msg in _messages) {
+            if (msg.sequenceId <= lastReadSeq && msg.senderId == _currentUserId) {
+              msg.isRead = true;
+            }
           }
-        }
-      });
+        });
+      }
     });
 
     // Listen for position updates
@@ -323,9 +325,11 @@ class _ChatScreenState extends State<ChatScreen> {
           }
         }
 
-        setState(() {
-          _messages[index] = updatedMessage;
-        });
+        if (mounted) {
+          setState(() {
+            _messages[index] = updatedMessage;
+          });
+        }
       }
     }, onError: (error) {
       if (kDebugMode) {
@@ -336,9 +340,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _loadCurrentUser() async {
     final userId = await AuthService.getUserUuid();
-    setState(() {
-      _currentUserId = userId;
-    });
+    if (mounted) {
+      setState(() {
+        _currentUserId = userId;
+      });
+    }
   }
 
   Future<void> _loadInitialMessages() async {
@@ -385,9 +391,11 @@ class _ChatScreenState extends State<ChatScreen> {
       if (kDebugMode) {
         print('❌ Error loading initial messages: $error');
       }
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -450,9 +458,11 @@ class _ChatScreenState extends State<ChatScreen> {
       if (kDebugMode) {
         print('Error loading more messages: $error');
       }
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -696,9 +706,11 @@ class _ChatScreenState extends State<ChatScreen> {
       await MessageDatabase.deleteConversation(widget.conversationId, userId: _currentUserId);
 
       // Clear messages from UI
-      setState(() {
-        _messages.clear();
-      });
+      if (mounted) {
+        setState(() {
+          _messages.clear();
+        });
+      }
 
       if (kDebugMode) {
         print('Soft-deleted all messages for conversation: ${widget.conversationId}');
@@ -1143,7 +1155,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                   const Center(
                                     child: Padding(
                                       padding: EdgeInsets.all(Spacing.md),
-                                      child: CircularProgressIndicator(),
+                                      child: CupertinoActivityIndicator(
+                                        radius: 14.0,
+                                      ),
                                     ),
                                   ),
                                 // Build combined list with spacers for positioned messages
@@ -3299,14 +3313,10 @@ class _GifMessageWidget extends StatelessWidget {
             if (loadingProgress == null) return child;
             return Container(
               color: Colors.grey.shade900,
-              child: Center(
-                child: CircularProgressIndicator(
-                  value: loadingProgress.expectedTotalBytes != null
-                      ? loadingProgress.cumulativeBytesLoaded /
-                          loadingProgress.expectedTotalBytes!
-                      : null,
+              child: const Center(
+                child: CupertinoActivityIndicator(
+                  radius: 14.0,
                   color: Colors.white,
-                  strokeWidth: 2,
                 ),
               ),
             );
@@ -3391,9 +3401,9 @@ class _StickerMessageWidget extends StatelessWidget {
           return Container(
             color: Colors.transparent,
             child: const Center(
-              child: CircularProgressIndicator(
+              child: CupertinoActivityIndicator(
+                radius: 12.0,
                 color: Colors.white,
-                strokeWidth: 2,
               ),
             ),
           );

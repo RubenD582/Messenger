@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 require("dotenv").config();
 const express = require("express");
 const jwt = require("jsonwebtoken");
@@ -16,15 +17,6 @@ const { authenticateToken } = require("../middleware/authMiddleware");
 // Load private and public keys for JWT signing and verification
 const privateKey = fs.readFileSync(path.join(__dirname, "../../config/keys/private_key.pem"), "utf8");
 const publicKey = fs.readFileSync(path.join(__dirname, "../../config/keys/public_key.pem"), "utf8");
-
-
-// Username schema validation (minimum 3 characters)
-const usernameSchema = Joi.string().min(3).required().messages({
-  'string.base': '"Username" should be a type of text',
-  'string.min': '"Username" should have a minimum length of {#limit} characters',
-  'string.empty': '"Username" cannot be empty',
-  'any.required': '"Username" is required',
-});
 
 // Password schema validation (minimum 8 characters)
 const passwordSchema = Joi.string().min(8).required().messages({
@@ -51,153 +43,6 @@ const logger = winston.createLogger({
   ],
 });
 
-// Register Route
-router.post("/register", loginRegisterLimiter, async (req, res) => {
-  const { username, password, first_name, last_name } = req.body;
-
-  // Validate username and password
-  const { error: usernameError } = usernameSchema.validate(username);
-  const { error: passwordError } = passwordSchema.validate(password);
-
-  if (usernameError) {
-    return res.status(400).json({ message: usernameError.details[0].message });
-  }
-
-  if (passwordError) {
-    return res.status(400).json({ message: passwordError.details[0].message });
-  }
-
-  // Validate first and last name (simple length check for example)
-  if (!first_name || first_name.trim().length === 0) {
-    return res.status(400).json({ message: "First name is required" });
-  }
-
-  if (!last_name || last_name.trim().length === 0) {
-    return res.status(400).json({ message: "Last name is required" });
-  }
-
-  try {
-    // Check if the username already exists in the database
-    const existingUser = await db.query("SELECT * FROM users WHERE username = $1", [username]);
-    if (existingUser.rows.length > 0) {
-      return res.status(400).json({ message: "Username already taken" });
-    }
-
-    // Hash the password with a higher salt rounds (12 rounds for stronger security)
-    const hashedPassword = await bcrypt.hash(password, 12);
-
-    // Insert the new user into the database
-    const result = await db.query(
-      "INSERT INTO users (username, password, first_name, last_name) VALUES ($1, $2, $3, $4) RETURNING id, username, first_name, last_name",
-      [username, hashedPassword, first_name, last_name]
-    );
-
-    // Respond with success message
-    res.status(201).json({
-      message: "User registered successfully",
-      username: result.rows[0].username,
-      first_name: result.rows[0].first_name,
-      last_name: result.rows[0].last_name
-    });
-  } catch (error) {
-    logger.error("Error during registration:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-
-// Login Route
-router.post("/login", loginRegisterLimiter, async (req, res) => {
-  const { username, password } = req.body;
-
-  try {
-    // Check if the user exists in the database
-    const result = await db.query("SELECT * FROM users WHERE username = $1", [username]);
-    if (result.rows.length === 0) {
-      return res.status(400).json({ message: "Invalid username or password" });
-    }
-
-    // Validate the password using bcrypt
-    const user = result.rows[0];
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(400).json({ message: "Invalid username or password" });
-    }
-
-    // Sign JWT using the private key (RS256)
-    const token = jwt.sign({ username: user.username, userId: user.id }, privateKey, { algorithm: "RS256", expiresIn: "1h" });
-
-    // Store JWT in an HttpOnly cookie for better security (prevents XSS)
-    res.cookie("access_token", token, { 
-      httpOnly: true, 
-      secure: process.env.NODE_ENV === "production", 
-      sameSite: "Strict" 
-    });
-    
-
-    // Respond with the username
-    res.json({ username: user.username, uuid: user.id });
-  } catch (error) {
-    logger.error("Error during login:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-// Refresh Token Route
-router.post("/refresh-token", authenticateToken, async (req, res) => {
-  const { refreshToken } = req.body;
-
-  if (!refreshToken) {
-    return res.status(403).json({ message: "No refresh token provided" });
-  }
-
-  try {
-    // Verify the refresh token using the public key
-    const decoded = jwt.verify(refreshToken, publicKey, { algorithms: ["RS256"] });
-
-    // Check if the refresh token is blacklisted
-    const reply = await redisClient.sIsMember("blacklisted_tokens", refreshToken);
-    
-    if (reply === 1) {
-      return res.status(403).json({ message: "Refresh token is blacklisted" });
-    }
-
-    // Issue a new access token
-    const newToken = jwt.sign(
-      { username: decoded.username, userId: decoded.userId },
-      privateKey,
-      { algorithm: "RS256", expiresIn: "1h" }
-    );
-
-    res.json({ token: newToken });
-  } catch (error) {
-    logger.error("Error during refresh token:", error);
-    res.status(403).json({ message: "Invalid refresh token" });
-  }
-});
-
-router.post("/logout", authenticateToken, async (req, res) => {
-  const { token } = req.body;
-
-  if (!token) {
-    return res.status(400).json({ message: "No token provided" });
-  }
-
-  try {
-    // Blacklist the token (Store it in Redis for distributed revocation)
-    const reply = await redisClient.sAdd('blacklisted_tokens', token);
-
-    if (reply === 0) {
-      // The token already exists in the set
-      return res.status(200).json({ message: "Token already blacklisted" });
-    }
-    res.json({ message: "Logged out successfully" });
-  } catch (error) {
-    logger.error("Error during logout:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
 // Basic Route
 router.get("/", (req, res) => {
   res.send("Server is running...");
@@ -209,6 +54,7 @@ router.get("/", (req, res) => {
 
 const otpService = require("../services/otpService");
 const emailService = require("../services/emailService");
+const SecurityService = require("../services/securityService");
 
 /**
  * POST /auth/register-with-email
@@ -362,9 +208,12 @@ router.post("/verify-email", async (req, res) => {
 /**
  * POST /auth/login-with-email
  * Login with email/password and optionally send OTP for 2FA
+ * Now with: Instagram-style lockout, single device sessions, IP tracking
  */
 router.post("/login-with-email", loginRegisterLimiter, async (req, res) => {
   const { email, password, use2FA } = req.body;
+  const ipAddress = req.ip || req.connection.remoteAddress;
+  const userAgent = req.get('user-agent') || 'unknown';
 
   try {
     // Validate input
@@ -372,9 +221,21 @@ router.post("/login-with-email", loginRegisterLimiter, async (req, res) => {
       return res.status(400).json({ message: "Email and password are required" });
     }
 
+    // CHECK 1: Instagram-style lockout check
+    const lockout = await SecurityService.checkLoginLockout(email);
+    if (lockout.locked) {
+      const minutes = Math.ceil(lockout.waitSeconds / 60);
+      return res.status(429).json({
+        message: `Too many failed attempts. Please wait ${minutes} minute${minutes > 1 ? 's' : ''} before trying again.`,
+        waitSeconds: lockout.waitSeconds
+      });
+    }
+
     // Check if user exists
     const result = await db.query("SELECT * FROM users WHERE email = $1", [email]);
     if (result.rows.length === 0) {
+      // Track failed attempt
+      await SecurityService.trackFailedLogin(email);
       return res.status(400).json({ message: "Invalid email or password" });
     }
 
@@ -383,8 +244,20 @@ router.post("/login-with-email", loginRegisterLimiter, async (req, res) => {
     // Verify password
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      return res.status(400).json({ message: "Invalid email or password" });
+      // Track failed attempt with progressive delays
+      const failInfo = await SecurityService.trackFailedLogin(email);
+
+      let message = "Invalid email or password";
+      if (failInfo.delaySeconds > 0) {
+        const minutes = Math.ceil(failInfo.delaySeconds / 60);
+        message = `Invalid email or password. Please wait ${minutes} minute${minutes > 1 ? 's' : ''} before trying again.`;
+      }
+
+      return res.status(400).json({ message });
     }
+
+    // SUCCESS: Clear failed login attempts
+    await SecurityService.clearFailedLogins(email);
 
     // Check if email is verified
     if (!user.email_verified) {
@@ -413,15 +286,17 @@ router.post("/login-with-email", loginRegisterLimiter, async (req, res) => {
       });
     }
 
-    // No 2FA - issue token directly
-    const token = jwt.sign(
-      { email: user.email, userId: user.id },
-      privateKey,
-      { algorithm: "RS256", expiresIn: "1h" }
-    );
+    // CHECK 2: Generate refresh token + short-lived access token
+    const { accessToken, refreshToken } = SecurityService.generateTokens(user);
+
+    // CHECK 3: Create single device session (invalidates other devices)
+    await SecurityService.createSession(user.id, refreshToken, ipAddress, userAgent);
+
+    // Store refresh token
+    await SecurityService.storeRefreshToken(user.id, refreshToken);
 
     // Store JWT in HttpOnly cookie
-    res.cookie("access_token", token, {
+    res.cookie("access_token", accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "Strict",
@@ -430,7 +305,7 @@ router.post("/login-with-email", loginRegisterLimiter, async (req, res) => {
     // Update last_login timestamp
     await db.query("UPDATE users SET last_login = NOW() WHERE id = $1", [user.id]);
 
-    logger.info(`User logged in: ${email}`);
+    logger.info(`User logged in: ${email} from IP: ${ipAddress}`);
 
     res.json({
       success: true,
@@ -441,11 +316,94 @@ router.post("/login-with-email", loginRegisterLimiter, async (req, res) => {
         firstName: user.first_name,
         lastName: user.last_name,
       },
-      token: token,
+      accessToken: accessToken,
+      refreshToken: refreshToken,
     });
   } catch (error) {
     logger.error("Error in /auth/login-with-email:", error);
     res.status(500).json({ message: "Login failed" });
+  }
+});
+
+/**
+ * POST /auth/refresh-token
+ * Exchange refresh token for new access token
+ */
+router.post("/refresh-token", async (req, res) => {
+  const { refreshToken } = req.body;
+  const ipAddress = req.ip || req.connection.remoteAddress;
+
+  try {
+    if (!refreshToken) {
+      return res.status(400).json({ message: "Refresh token required" });
+    }
+
+    // Verify refresh token is not blacklisted
+    const tokenCheck = await SecurityService.verifyRefreshToken(refreshToken);
+    if (!tokenCheck.valid) {
+      return res.status(403).json({ message: tokenCheck.reason });
+    }
+
+    // Verify JWT signature
+    const decoded = jwt.verify(refreshToken, publicKey, { algorithms: ["RS256"] });
+
+    if (decoded.type !== 'refresh') {
+      return res.status(403).json({ message: "Invalid token type" });
+    }
+
+    // Get active session
+    const session = await SecurityService.getActiveSession(decoded.userId);
+    if (!session || session.refreshToken !== refreshToken) {
+      return res.status(403).json({ message: "Session expired or invalid" });
+    }
+
+    // CHECK: IP switching detection
+    const ipCheck = await SecurityService.checkIPSwitch(decoded.userId, ipAddress, session.ipAddress);
+    if (ipCheck.suspicious) {
+      logger.warn(`Suspicious IP switching detected for user ${decoded.userId}: ${ipCheck.switchCount} switches`);
+      // Could optionally require re-authentication here
+      // return res.status(403).json({ message: "Suspicious activity detected. Please log in again." });
+    }
+
+    // Get user data
+    const userResult = await db.query("SELECT * FROM users WHERE id = $1", [decoded.userId]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const user = userResult.rows[0];
+
+    // ROTATE: Generate new tokens
+    const newTokens = SecurityService.generateTokens(user);
+
+    // Blacklist old refresh token
+    await redisClient.set(`blacklist:${refreshToken}`, '1', 'EX', 7 * 24 * 60 * 60);
+
+    // Update session with new refresh token
+    await SecurityService.createSession(
+      user.id,
+      newTokens.refreshToken,
+      ipAddress,
+      session.userAgent
+    );
+
+    // Store new refresh token
+    await SecurityService.storeRefreshToken(user.id, newTokens.refreshToken);
+
+    logger.info(`Token refreshed for user: ${user.email}`);
+
+    res.json({
+      success: true,
+      accessToken: newTokens.accessToken,
+      refreshToken: newTokens.refreshToken,
+    });
+
+  } catch (error) {
+    if (error.name === 'TokenExpiredError') {
+      return res.status(403).json({ message: "Refresh token expired. Please log in again." });
+    }
+    logger.error("Error refreshing token:", error);
+    res.status(403).json({ message: "Invalid refresh token" });
   }
 });
 
@@ -551,3 +509,101 @@ router.get("/me", authenticateToken, async (req, res) => {
 
 // Export the router
 module.exports = router;
+
+/**
+ * POST /auth/forgot-password
+ * Request a password reset email
+ */
+router.post("/forgot-password", async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    // Validate input
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    // Check if email exists
+    const userResult = await db.query("SELECT id, email FROM users WHERE email = $1", [email]);
+    if (userResult.rows.length === 0) {
+      // For security, send a generic success message even if email not found
+      // to prevent email enumeration
+      return res.status(200).json({ success: true, message: "If your email is registered, you will receive a password reset link." });
+    }
+
+    const user = userResult.rows[0];
+
+    // Generate a secure, URL-safe reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+
+    // Store the reset token in Redis with a 1-hour expiry
+    // Key: passwordReset:${token}, Value: userId
+    await redisClient.set(`passwordReset:${resetToken}`, user.id.toString(), 'EX', 3600); // 1 hour expiry
+
+    // Send password reset email
+    const emailResult = await emailService.sendPasswordReset(user.email, resetToken);
+
+    if (!emailResult.success) {
+      logger.error(`Failed to send password reset email to ${email}:`, emailResult.error);
+      return res.status(500).json({ message: "Failed to send password reset email" });
+    }
+
+    logger.info(`Password reset link sent to: ${email}`);
+    res.status(200).json({ success: true, message: "If your email is registered, you will receive a password reset link." });
+
+  } catch (error) {
+    logger.error("Error in /auth/forgot-password:", error);
+    res.status(500).json({ message: "Server error during password reset request" });
+  }
+});
+
+/**
+ * POST /auth/reset-password
+ * Reset user's password using a valid token
+ */
+router.post("/reset-password", async (req, res) => {
+  const { token, newPassword } = req.body;
+
+  try {
+    // Validate input
+    if (!token || !newPassword) {
+      return res.status(400).json({ message: "Token and new password are required" });
+    }
+
+    // Validate new password
+    const { error: passwordError } = passwordSchema.validate(newPassword);
+    if (passwordError) {
+      return res.status(400).json({ message: passwordError.details[0].message });
+    }
+
+    // Retrieve user ID from Redis using the token
+    const userId = await redisClient.get(`passwordReset:${token}`);
+
+    if (!userId) {
+      return res.status(400).json({ message: "Password reset token is invalid or has expired." });
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+    // Update user's password in the database
+    await db.query("UPDATE users SET password = $1 WHERE id = $2", [hashedPassword, userId]);
+
+    // SECURITY: Revoke all tokens for this user (logout all devices)
+    await SecurityService.revokeAllUserTokens(userId);
+
+    // Delete the reset token from Redis to prevent reuse
+    await redisClient.del(`passwordReset:${token}`);
+
+    logger.info(`Password reset for user ID: ${userId} - all sessions revoked`);
+    res.status(200).json({
+      success: true,
+      message: "Your password has been successfully reset. All devices have been logged out for security."
+    });
+
+  } catch (error) {
+    logger.error("Error in /auth/reset-password:", error);
+    res.status(500).json({ message: "Server error during password reset" });
+  }
+});
+

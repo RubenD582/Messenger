@@ -1,3 +1,4 @@
+const path = require("path");
 const dotenv = require("dotenv");
 dotenv.config(); // Moved to the very top
 
@@ -50,6 +51,14 @@ app.use(cookieParser());
 app.use("/auth", authRoutes);
 app.use("/friends", friendRoutes);
 app.use("/messages", messageRoutes);
+
+// Serve static files from the Flutter web build directory
+app.use(express.static(path.join(__dirname, '../client/build/web')));
+
+// For any other GET request, serve the Flutter app's index.html
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../client/build/web/index.html'));
+});
 
 // Initialize WebSockets
 chatSocket(io);

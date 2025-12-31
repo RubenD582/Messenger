@@ -1,4 +1,6 @@
 import 'package:client/screens/auth/sign_in_screen.dart';
+import 'package:client/screens/auth/forgot_password_screen.dart'; // Import ForgotPasswordScreen
+import 'package:client/screens/auth/reset_password_screen.dart';   // Import ResetPasswordScreen
 import 'package:client/services/notification_service.dart';
 import 'package:client/database/message_database.dart';
 import 'package:client/theme/colors.dart';
@@ -8,6 +10,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -140,7 +143,23 @@ class MyApp extends StatelessWidget {
           ),
         ],
       ),
-      home: const SignInScreen(),
+      initialRoute: '/',
+      onGenerateRoute: (settings) {
+        if (settings.name == '/reset-password') {
+          String? token;
+          // Try to get token from arguments first (for internal navigation)
+          if (settings.arguments is String) {
+            token = settings.arguments as String;
+          } else {
+            // For deep links (web), try to get from Uri.base
+            final uri = Uri.parse(Uri.base.toString());
+            token = uri.queryParameters['token'];
+          }
+          return MaterialPageRoute(builder: (context) => ResetPasswordScreen(token: token));
+        }
+        // Default route
+        return MaterialPageRoute(builder: (context) => const SignInScreen());
+      },
     );
   }
 }

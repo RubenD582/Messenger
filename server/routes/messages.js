@@ -4,25 +4,18 @@ const express = require("express");
 const router = express.Router();
 const db = require("../db");
 const { authenticateToken } = require("../middleware/authMiddleware");
-const { authenticateClerkToken, enforceSingleSession } = require("../middleware/clerkMiddleware");
+const { userRateLimiter } = require("../middleware/userRateLimiter");
+const { v4: uuidv4 } = require('uuid');
+const redis = require('../config/redisClient');
 const { producer } = require('../kafkaClient');
 
-// NOTE: During migration phase, routes use old authenticateToken middleware
-// After user migration is complete, replace with: authenticateClerkToken, enforceSingleSession
-// Example: router.post("/send", authenticateClerkToken, enforceSingleSession, async (req, res) => {
-const { v4: uuidv4 } = require('uuid');
-
-// Use shared Redis client with Sentinel support
-const redis = require('../config/redisClient');
-
-// Helper: Generate conversation ID (deterministic)
+// Helper function to generate conversation ID from two user IDs
 function getConversationId(userId1, userId2) {
-  const sorted = [userId1, userId2].sort();
-  return `${sorted[0]}_${sorted[1]}`;
+  return [userId1, userId2].sort().join('_');
 }
 
 // POST /messages/send - Send a message (supports regular messages and drawings)
-router.post("/send", authenticateToken, async (req, res) => {
+router.post("/send", authenticateToken, userRateLimiter, async (req, res) => {
   const {
     receiverId,
     message,
@@ -84,7 +77,7 @@ router.post("/send", authenticateToken, async (req, res) => {
 });
 
 // GET /messages/history/:conversationId - Fetch message history with pagination
-router.get("/history/:conversationId", authenticateToken, async (req, res) => {
+router.get("/history/:conversationId", authenticateToken, userRateLimiter, async (req, res) => {
   const { conversationId } = req.params;
   const userId = req.user.userId;
   const { beforeSequence, limit = 50 } = req.query;
@@ -206,7 +199,7 @@ router.get("/unread-count", authenticateToken, async (req, res) => {
     const count = parseInt(result.rows[0].count);
 
     // Cache for 60 seconds
-    await redis.setex(`unread_count:${userId}`, 60, count);
+    await redis.set(`unread_count:${userId}`, count.toString(), 'EX', 60);
 
     res.json({ unreadCount: count });
 

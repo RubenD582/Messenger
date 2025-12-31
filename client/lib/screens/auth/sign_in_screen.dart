@@ -1,3 +1,4 @@
+import 'package:client/screens/auth/forgot_password_screen.dart'; // Import ForgotPasswordScreen
 import 'package:client/components/apple_button.dart';
 import 'package:client/components/textfield.dart';
 import 'package:client/screens/auth/auth_2fa_verification.dart';
@@ -72,7 +73,8 @@ class _SignInScreenState extends State<SignInScreen> {
           (Route<dynamic> route) => false,
         );
       }
-    } else {
+    }
+    else {
       Fluttertoast.showToast(msg: result['error'] ?? 'Login failed');
     }
   }
@@ -111,18 +113,6 @@ class _SignInScreenState extends State<SignInScreen> {
             children: [
               // const SizedBox(height: 40), // Removed this SizedBox
 
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: Text(
-                  'Welcome back! Please sign in to continue.',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(color: AppColors.textSecondary),
-                ),
-              ),
-
               const SizedBox(height: 48), // Changed back to 48
 
               CustomCupertinoTextField(
@@ -143,29 +133,52 @@ class _SignInScreenState extends State<SignInScreen> {
                 obscureText: true,
               ),
 
-              const SizedBox(height: 16),
-
-              Row(
-                children: [
-                  CupertinoSwitch(
-                    value: _use2FA,
-                    onChanged: (value) {
-                      setState(() {
-                        _use2FA = value;
-                      });
-                    },
-                    activeTrackColor: AppColors.primary,
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Use Two-Factor Authentication',
+              Align(
+                alignment: Alignment.centerRight,
+                child: CupertinoButton(
+                  padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 0.0),
+                  onPressed: () {
+                    // Navigate to Forgot Password Screen
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const ForgotPasswordScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text(
+                    'Forgot Password?',
                     style: TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 15,
+                      color: AppColors.purpleAccent,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                ],
+                ),
               ),
+
+              const SizedBox(height: 16),
+
+              // Row(
+              //   children: [
+              //     CupertinoSwitch(
+              //       value: _use2FA,
+              //       onChanged: (value) {
+              //         setState(() {
+              //           _use2FA = value;
+              //         });
+              //       },
+              //       activeTrackColor: AppColors.primary,
+              //     ),
+              //     const SizedBox(width: 12),
+              //     const Text(
+              //       'Use Two-Factor Authentication',
+              //       style: TextStyle(
+              //         color: AppColors.textSecondary,
+              //         fontSize: 15,
+              //       ),
+              //     ),
+              //   ],
+              // ),
 
               const SizedBox(height: 24),
 
@@ -203,7 +216,7 @@ class _SignInScreenState extends State<SignInScreen> {
                       child: const Text(
                         'Sign Up',
                         style: TextStyle(
-                          color: AppColors.primary,
+                          color: AppColors.purpleAccent, // Changed to purpleAccent
                           fontSize: 15,
                           fontWeight: FontWeight.w600,
                         ),

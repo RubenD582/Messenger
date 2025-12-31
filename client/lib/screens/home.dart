@@ -5,7 +5,7 @@ import 'package:client/screens/requests.dart';
 import 'package:client/screens/chat_screen.dart';
 import 'search.dart';
 import 'package:client/services/api_service.dart';
-import 'package:client/services/auth.dart';
+import 'package:client/services/auth_service.dart';
 import 'package:client/theme/colors.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';

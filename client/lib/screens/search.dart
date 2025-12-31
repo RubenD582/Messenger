@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'dart:async';
-import 'package:client/services/auth.dart';
+import 'package:client/services/auth_service.dart';
 import 'package:shimmer/shimmer.dart';
 
 import '../services/api_service.dart';
@@ -162,7 +162,7 @@ class _SearchPageState extends State<SearchPage> {
                 Flexible(
                   child: CupertinoSearchTextField(
                     controller: _searchController,
-                    placeholder: "Search for username...",
+                    placeholder: "Search for friends...",
                     placeholderStyle: const TextStyle(color: Color(0xFF8E8E93), fontSize: 16),
                     padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
                     style: const TextStyle(color: Colors.white, fontSize: 15),
@@ -281,7 +281,7 @@ class _SearchPageState extends State<SearchPage> {
                                       Row(
                                         children: [
                                           Text(
-                                            '${user['username']}',
+                                            '${user['first_name']} ${user['last_name']}',
                                             style: TextStyle(
                                               color: Colors.white,
                                               fontWeight: FontWeight.w700,
@@ -300,16 +300,17 @@ class _SearchPageState extends State<SearchPage> {
                                           )
                                         ],
                                       ),
-                                      Text(
-                                        '${user['first_name']} ${user['last_name']}',
-                                        style: TextStyle(
-                                          color: Color(0xFF76767B),
-                                          fontWeight: FontWeight.w500,
-                                          fontSize: 15,
-                                          letterSpacing: -0.3,
-                                          height: 1.4
+                                      if (user['username'] != null)
+                                        Text(
+                                          '@${user['username']}',
+                                          style: TextStyle(
+                                            color: Color(0xFF76767B),
+                                            fontWeight: FontWeight.w500,
+                                            fontSize: 15,
+                                            letterSpacing: -0.3,
+                                            height: 1.4
+                                          ),
                                         ),
-                                      ),
                                     ],
                                   ),
             

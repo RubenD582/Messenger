@@ -16,6 +16,9 @@ exports.authenticateToken = (req, res, next) => {
     req.user = decoded;
     next();
   } catch (error) {
+    if (process.env.NODE_ENV === 'development') {
+      console.error("Authentication: Token verification failed:", error.message);
+    }
     res.status(403).json({ message: "Invalid token" });
   }
 };

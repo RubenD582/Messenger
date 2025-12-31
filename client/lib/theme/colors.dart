@@ -10,6 +10,7 @@ class AppColors {
   static const primary = Color(0xFF0095F6);         // Instagram blue
   static const primaryLight = Color(0xFF3897F0);
   static const primaryDark = Color(0xFF005EBF);
+  static const purpleAccent = Color(0xFF5856D6);    // iOS purple from AppleButton
 
   // Status colors
   static const online = Color(0xFF00D856);          // WhatsApp green

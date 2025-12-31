@@ -114,12 +114,13 @@ class _CustomCupertinoTextFieldState extends State<CustomCupertinoTextField> {
                       _obscureText = !_obscureText;
                     });
                   },
-                  child: Icon(
-                    _obscureText
-                        ? CupertinoIcons.eye_slash_fill
-                        : CupertinoIcons.eye_fill,
-                    color: AppColors.textTertiary,
-                    size: 20,
+                  child: Text(
+                    _obscureText ? 'SHOW' : 'HIDE',
+                    style: const TextStyle(
+                      color: AppColors.textTertiary, // Changed to a grey shade
+                      fontSize: 12, // Made even smaller
+                      fontWeight: FontWeight.bold, // Made bolder
+                    ),
                   ),
                 ),
             ],
