@@ -5,6 +5,8 @@ class KlipyConfig {
   static const String baseUrl = 'https://api.klipy.com/api/v1';
   static const String searchEndpoint = '/stickers/search';
   static const String trendingEndpoint = '/stickers/trending';
+  static const String clipsSearchEndpoint = '/clips/search';
+  static const String clipsTrendingEndpoint = '/clips/trending';
 
   // Default parameters
   static const int defaultLimit = 20;

@@ -22,6 +22,7 @@ import 'package:client/widgets/sticker_picker_sheet.dart';
 import 'package:client/services/tenor_service.dart';
 import 'package:client/services/klipy_service.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:client/widgets/clip_picker_sheet.dart';
 
 class ChatScreen extends StatefulWidget {
   final String friendId;
@@ -700,6 +701,45 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  void _showClipPicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => ClipPickerSheet(
+        onClipSelected: (clip) => _sendClip(clip),
+      ),
+    );
+  }
+
+  Future<void> _sendClip(KlipyClip clip) async {
+    try {
+      final metadata = {
+        'type': 'clip', // New message type
+        'clipId': clip.id,
+        'videoUrl': clip.videoUrl,
+        'previewUrl': clip.previewUrl,
+        'title': clip.title,
+        'width': clip.width,
+        'height': clip.height,
+      };
+
+      await _chatServiceWithStorage.sendMessage(
+        'Clip', // Use simple text
+        messageType: 'clip',
+        metadata: metadata,
+      );
+
+      if (kDebugMode) {
+        print('✅ Clip sent successfully');
+      }
+    } catch (error) {
+      if (kDebugMode) {
+        print('Error sending clip: $error');
+      }
+    }
+  }
+
   Future<void> _deleteAllMessages() async {
     try {
       // Soft delete from local database
@@ -1317,14 +1357,14 @@ class _ChatScreenState extends State<ChatScreen> {
                                             spacerHeight = ((msgBottomY - estimatedCurrentY).clamp(0.0, double.infinity)) + 5;
                                           }
 
-                                          if (kDebugMode) {
-                                            print('Creating ${msg.messageType} spacer:');
-                                            print('  Current flow Y: ${estimatedCurrentY.toStringAsFixed(0)}');
-                                            print('  Message top Y: ${msgTopY.toStringAsFixed(0)}');
-                                            print('  Message bottom Y: ${msgBottomY.toStringAsFixed(0)}');
-                                            print('  Spacer height: ${spacerHeight.toStringAsFixed(0)}');
-                                            print('  Spacer will end at: ${(estimatedCurrentY + spacerHeight).toStringAsFixed(0)}');
-                                          }
+                                          // if (kDebugMode) {
+                                          //   print('Creating ${msg.messageType} spacer:');
+                                          //   print('  Current flow Y: ${estimatedCurrentY.toStringAsFixed(0)}');
+                                          //   print('  Message top Y: ${msgTopY.toStringAsFixed(0)}');
+                                          //   print('  Message bottom Y: ${msgBottomY.toStringAsFixed(0)}');
+                                          //   print('  Spacer height: ${spacerHeight.toStringAsFixed(0)}');
+                                          //   print('  Spacer will end at: ${(estimatedCurrentY + spacerHeight).toStringAsFixed(0)}');
+                                          // }
 
                                           // Only add spacer if height would be positive
                                           if (spacerHeight > 0) {
@@ -1569,7 +1609,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             final isMe = message.senderId == _currentUserId;
                             final isLastMessage = _messages.isNotEmpty &&
                                 _messages.last.messageId == message.messageId;
-                            final isDrawingOrGifOrSticker = message.messageType == 'drawing' || message.messageType == 'gif' || message.messageType == 'sticker';
+                            final isDrawingOrGifOrStickerOrClip = message.messageType == 'drawing' || message.messageType == 'gif' || message.messageType == 'sticker' || message.messageType == 'clip';
 
                             // Calculate pixel position from percentage
                             // Mirror X position for messages from other users (applies to all message types)
@@ -1592,10 +1632,11 @@ class _ChatScreenState extends State<ChatScreen> {
                             // Build the child widget with IgnorePointer when in drawing mode
                             final Widget childWidget;
 
-                            if (isDrawingOrGifOrSticker) {
+                            if (isDrawingOrGifOrStickerOrClip) {
                               // Check message type
                               final isGif = message.messageType == 'gif';
                               final isSticker = message.messageType == 'sticker';
+                              final isClip = message.messageType == 'clip'; // New
 
                               final mediaWidget = isGif
                                   ? _GifMessageWidget(
@@ -1611,13 +1652,20 @@ class _ChatScreenState extends State<ChatScreen> {
                                           viewportWidth: constraints.maxWidth,
                                           viewportHeight: viewportHeight,
                                         )
-                                      : _DrawingMessageWidget(
-                                          key: ValueKey('positioned_drawing_${message.messageId}'),
-                                          message: message,
-                                          viewportWidth: constraints.maxWidth,
-                                          viewportHeight: viewportHeight,
-                                          isDebugging: _isDebugging,
-                                        );
+                                      : isClip
+                                          ? _ClipMessageWidget(
+                                              key: ValueKey('positioned_clip_${message.messageId}'),
+                                              message: message,
+                                              viewportWidth: constraints.maxWidth,
+                                              viewportHeight: viewportHeight,
+                                            )
+                                          : _DrawingMessageWidget(
+                                              key: ValueKey('positioned_drawing_${message.messageId}'),
+                                              message: message,
+                                              viewportWidth: constraints.maxWidth,
+                                              viewportHeight: viewportHeight,
+                                              isDebugging: _isDebugging,
+                                            );
 
                               // Make drawings/GIFs draggable, rotatable, and scalable if sent by current user
                               if (isMe && !_isDrawingMode) {
@@ -2345,6 +2393,14 @@ class _ChatScreenState extends State<ChatScreen> {
               },
               title: 'Stickers',
               icon: CupertinoIcons.smiley,
+            ),
+            PullDownMenuItem( // Using PullDownMenuItem for now, will make custom if needed
+              onTap: () {
+                FocusScope.of(context).unfocus();
+                _showClipPicker();
+              },
+              title: 'Clips',
+              icon: CupertinoIcons.play_rectangle_fill, // Using a suitable Cupertino icon for clips
             ),
           ],
           buttonBuilder: (context, showMenu) => IconButton(
@@ -3420,6 +3476,113 @@ class _StickerMessageWidget extends StatelessWidget {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+// Widget for rendering clip messages
+class _ClipMessageWidget extends StatelessWidget {
+  final Message message;
+  final double viewportWidth;
+  final double viewportHeight;
+
+  const _ClipMessageWidget({
+    super.key,
+    required this.message,
+    required this.viewportWidth,
+    required this.viewportHeight,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    // Parse clip data from metadata
+    final metadata = message.metadata;
+    if (metadata == null || metadata['videoUrl'] == null) {
+      return const SizedBox.shrink();
+    }
+
+    final videoUrl = metadata['videoUrl'] as String;
+    final clipWidth = (metadata['width'] as num?)?.toDouble() ?? 200.0;
+    final clipHeight = (metadata['height'] as num?)?.toDouble() ?? 200.0;
+
+    // Calculate display size - maintain aspect ratio but limit to reasonable size
+    final maxDisplayWidth = viewportWidth * 0.6; // Max 60% of screen width
+    final maxDisplayHeight = viewportHeight * 0.4; // Max 40% of screen height
+
+    double displayWidth = clipWidth;
+    double displayHeight = clipHeight;
+
+    // Scale down if too large
+    if (displayWidth > maxDisplayWidth) {
+      final scale = maxDisplayWidth / displayWidth;
+      displayWidth = maxDisplayWidth;
+      displayHeight = displayHeight * scale;
+    }
+
+    if (displayHeight > maxDisplayHeight) {
+      final scale = maxDisplayHeight / displayHeight;
+      displayHeight = maxDisplayHeight;
+      displayWidth = displayWidth * scale;
+    }
+
+    // Ensure minimum size
+    displayWidth = displayWidth.clamp(100.0, maxDisplayWidth);
+    displayHeight = displayHeight.clamp(100.0, maxDisplayHeight);
+
+    return Container(
+      width: displayWidth,
+      height: displayHeight,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Image.network(
+              metadata['previewUrl'] ?? videoUrl, // Use previewUrl if available, else videoUrl
+              fit: BoxFit.cover,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Container(
+                  color: Colors.grey.shade900,
+                  child: const Center(
+                    child: CupertinoActivityIndicator(
+                      radius: 14.0,
+                      color: Colors.white,
+                    ),
+                  ),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  color: Colors.grey.shade900,
+                  child: const Center(
+                    child: Icon(
+                      Icons.error_outline,
+                      color: Colors.grey,
+                      size: 40,
+                    ),
+                  ),
+                );
+              },
+            ),
+            const Icon( // Play icon overlay
+              Icons.play_circle_fill,
+              color: Colors.white70,
+              size: 50,
+            ),
+          ],
+        ),
       ),
     );
   }
