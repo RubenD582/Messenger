@@ -23,6 +23,7 @@ import 'package:client/services/tenor_service.dart';
 import 'package:client/services/klipy_service.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:client/widgets/clip_picker_sheet.dart';
+import 'package:client/screens/fullscreen_gif_viewer.dart';
 
 class ChatScreen extends StatefulWidget {
   final String friendId;
@@ -178,7 +179,8 @@ class _ChatScreenState extends State<ChatScreen> {
       }
 
       // Check if this is a "chat cleared" system message
-      final isChatCleared = message.messageType == 'system' &&
+      final isChatCleared =
+          message.messageType == 'system' &&
           message.metadata?['action'] == 'chat_cleared';
 
       if (isChatCleared) {
@@ -187,7 +189,9 @@ class _ChatScreenState extends State<ChatScreen> {
           setState(() {
             _messages.clear();
             if (kDebugMode) {
-              print('🗑️ Cleared all messages from UI (chat cleared by other user)');
+              print(
+                '🗑️ Cleared all messages from UI (chat cleared by other user)',
+              );
             }
           });
         }
@@ -209,7 +213,9 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) {
         setState(() {
           // Find if a message with the same ID or a temp ID already exists
-          final index = _messages.indexWhere((m) => m.messageId == message.messageId);
+          final index = _messages.indexWhere(
+            (m) => m.messageId == message.messageId,
+          );
 
           if (index != -1) {
             // Replace existing message (e.g., update status)
@@ -249,7 +255,9 @@ class _ChatScreenState extends State<ChatScreen> {
       try {
         await MessageDatabase.markAsRead(widget.conversationId, lastReadSeq);
         if (kDebugMode) {
-          print('Marked messages as read in local DB up to sequence: $lastReadSeq');
+          print(
+            'Marked messages as read in local DB up to sequence: $lastReadSeq',
+          );
         }
       } catch (e) {
         if (kDebugMode) {
@@ -260,7 +268,8 @@ class _ChatScreenState extends State<ChatScreen> {
       if (mounted) {
         setState(() {
           for (var msg in _messages) {
-            if (msg.sequenceId <= lastReadSeq && msg.senderId == _currentUserId) {
+            if (msg.sequenceId <= lastReadSeq &&
+                msg.senderId == _currentUserId) {
               msg.isRead = true;
             }
           }
@@ -269,74 +278,84 @@ class _ChatScreenState extends State<ChatScreen> {
     });
 
     // Listen for position updates
-    _chatService.positionUpdateStream.listen((updateData) async {
-      if (kDebugMode) {
-        print('🔔 Position update stream event received!');
-        print('   Data: $updateData');
-      }
-
-      final messageId = updateData['messageId'];
-      final message = _messages.firstWhere((m) => m.messageId == messageId, orElse: () => _messages.first);
-      final index = _messages.indexOf(message);
-
-      if (kDebugMode) {
-        print('   Message found at index: $index');
-      }
-
-      if (index != -1) {
-        // Convert rotation and scale to double (they might come as int from JSON)
-        double? rotation;
-        if (updateData['rotation'] != null) {
-          rotation = (updateData['rotation'] as num).toDouble();
+    _chatService.positionUpdateStream.listen(
+      (updateData) async {
+        if (kDebugMode) {
+          print('🔔 Position update stream event received!');
+          print('   Data: $updateData');
         }
 
-        double? scale;
-        if (updateData['scale'] != null) {
-          scale = (updateData['scale'] as num).toDouble();
-        }
-
-        final updatedMessage = message.copyWith(
-          positionX: updateData['positionX'],
-          positionY: updateData['positionY'],
-          isPositioned: updateData['isPositioned'],
-          positionedBy: updateData['positionedBy'],
-          positionedAt: updateData['positionedAt'],
-          rotation: rotation,
-          scale: scale,
+        final messageId = updateData['messageId'];
+        final message = _messages.firstWhere(
+          (m) => m.messageId == messageId,
+          orElse: () => _messages.first,
         );
+        final index = _messages.indexOf(message);
 
         if (kDebugMode) {
-          print('📍 Position update received for message $messageId:');
-          print('   Position: (${updateData['positionX']}, ${updateData['positionY']})');
-          print('   Rotation: ${updateData['rotation']} -> $rotation');
-          print('   Scale: ${updateData['scale']} -> $scale');
-          print('   Updated message rotation: ${updatedMessage.rotation}');
-          print('   Updated message scale: ${updatedMessage.scale}');
+          print('   Message found at index: $index');
         }
 
-        // Save position update to local database
-        try {
-          await MessageDatabase.insertMessage(updatedMessage);
-          if (kDebugMode) {
-            print('Saved position update to local DB for message: $messageId');
+        if (index != -1) {
+          // Convert rotation and scale to double (they might come as int from JSON)
+          double? rotation;
+          if (updateData['rotation'] != null) {
+            rotation = (updateData['rotation'] as num).toDouble();
           }
-        } catch (e) {
-          if (kDebugMode) {
-            print('Error saving position update to DB: $e');
-          }
-        }
 
-        if (mounted) {
-          setState(() {
-            _messages[index] = updatedMessage;
-          });
+          double? scale;
+          if (updateData['scale'] != null) {
+            scale = (updateData['scale'] as num).toDouble();
+          }
+
+          final updatedMessage = message.copyWith(
+            positionX: updateData['positionX'],
+            positionY: updateData['positionY'],
+            isPositioned: updateData['isPositioned'],
+            positionedBy: updateData['positionedBy'],
+            positionedAt: updateData['positionedAt'],
+            rotation: rotation,
+            scale: scale,
+          );
+
+          if (kDebugMode) {
+            print('📍 Position update received for message $messageId:');
+            print(
+              '   Position: (${updateData['positionX']}, ${updateData['positionY']})',
+            );
+            print('   Rotation: ${updateData['rotation']} -> $rotation');
+            print('   Scale: ${updateData['scale']} -> $scale');
+            print('   Updated message rotation: ${updatedMessage.rotation}');
+            print('   Updated message scale: ${updatedMessage.scale}');
+          }
+
+          // Save position update to local database
+          try {
+            await MessageDatabase.insertMessage(updatedMessage);
+            if (kDebugMode) {
+              print(
+                'Saved position update to local DB for message: $messageId',
+              );
+            }
+          } catch (e) {
+            if (kDebugMode) {
+              print('Error saving position update to DB: $e');
+            }
+          }
+
+          if (mounted) {
+            setState(() {
+              _messages[index] = updatedMessage;
+            });
+          }
         }
-      }
-    }, onError: (error) {
-      if (kDebugMode) {
-        print('❌ Error in position update stream: $error');
-      }
-    });
+      },
+      onError: (error) {
+        if (kDebugMode) {
+          print('❌ Error in position update stream: $error');
+        }
+      },
+    );
   }
 
   Future<void> _loadCurrentUser() async {
@@ -361,7 +380,11 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       // Initialize chat service with conversation details
-      _chatService.init(widget.conversationId, widget.friendId, _currentUserId!);
+      _chatService.init(
+        widget.conversationId,
+        widget.friendId,
+        _currentUserId!,
+      );
 
       // Initialize ChatServiceWithStorage
       _chatServiceWithStorage = ChatServiceWithStorage(
@@ -444,11 +467,14 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       final oldestSequenceId = _messages.first.sequenceId;
-      final olderMessages = await _chatServiceWithStorage.loadMoreMessages(oldestSequenceId);
+      final olderMessages = await _chatServiceWithStorage.loadMoreMessages(
+        oldestSequenceId,
+      );
 
       setState(() {
         _messages.insertAll(0, olderMessages);
-        _hasMore = olderMessages.length >= 50; // Assume more if we got a full page
+        _hasMore =
+            olderMessages.length >= 50; // Assume more if we got a full page
         _isLoading = false;
       });
 
@@ -506,21 +532,42 @@ class _ChatScreenState extends State<ChatScreen> {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
       final yesterday = today.subtract(const Duration(days: 1));
-      final messageDate = DateTime(messageTime.year, messageTime.month, messageTime.day);
+      final messageDate = DateTime(
+        messageTime.year,
+        messageTime.month,
+        messageTime.day,
+      );
 
       final hour = messageTime.hour;
       final minute = messageTime.minute.toString().padLeft(2, '0');
-      final timeStr = hour == 0 ? '12:$minute AM'
-        : hour < 12 ? '$hour:$minute AM'
-        : hour == 12 ? '12:$minute PM'
-        : '${hour - 12}:$minute PM';
+      final timeStr =
+          hour == 0
+              ? '12:$minute AM'
+              : hour < 12
+              ? '$hour:$minute AM'
+              : hour == 12
+              ? '12:$minute PM'
+              : '${hour - 12}:$minute PM';
 
       if (messageDate == today) {
         return 'Today at $timeStr';
       } else if (messageDate == yesterday) {
         return 'Yesterday at $timeStr';
       } else {
-        final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        final months = [
+          'Jan',
+          'Feb',
+          'Mar',
+          'Apr',
+          'May',
+          'Jun',
+          'Jul',
+          'Aug',
+          'Sep',
+          'Oct',
+          'Nov',
+          'Dec',
+        ];
         return '${months[messageTime.month - 1]} ${messageTime.day} at $timeStr';
       }
     } catch (e) {
@@ -557,16 +604,18 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       // Convert strokes to JSON format
-      final strokesJson = _drawingStrokes.map((stroke) {
-        // Convert color to hex string (ARGB format)
-        final colorHex = '#${stroke.color.toARGB32().toRadixString(16).padLeft(8, '0')}';
-        return {
-          'points': stroke.points.map((p) => [p.dx, p.dy]).toList(),
-          'color': colorHex,
-          'strokeWidth': 3.0,
-          'brushType': stroke.brushType.name, // Save brush type
-        };
-      }).toList();
+      final strokesJson =
+          _drawingStrokes.map((stroke) {
+            // Convert color to hex string (ARGB format)
+            final colorHex =
+                '#${stroke.color.toARGB32().toRadixString(16).padLeft(8, '0')}';
+            return {
+              'points': stroke.points.map((p) => [p.dx, p.dy]).toList(),
+              'color': colorHex,
+              'strokeWidth': 3.0,
+              'brushType': stroke.brushType.name, // Save brush type
+            };
+          }).toList();
 
       // Calculate bounds
       double minX = 1.0, minY = 1.0, maxX = 0.0, maxY = 0.0;
@@ -581,12 +630,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
       final metadata = {
         'strokes': strokesJson,
-        'bounds': {
-          'minX': minX,
-          'minY': minY,
-          'maxX': maxX,
-          'maxY': maxY,
-        },
+        'bounds': {'minX': minX, 'minY': minY, 'maxX': maxX, 'maxY': maxY},
       };
 
       // Calculate center position for the drawing
@@ -622,9 +666,8 @@ class _ChatScreenState extends State<ChatScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => GifPickerSheet(
-        onGifSelected: (gif) => _sendGif(gif),
-      ),
+      builder:
+          (context) => GifPickerSheet(onGifSelected: (gif) => _sendGif(gif)),
     );
   }
 
@@ -664,9 +707,10 @@ class _ChatScreenState extends State<ChatScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => StickerPickerSheet(
-        onStickerSelected: (sticker) => _sendSticker(sticker),
-      ),
+      builder:
+          (context) => StickerPickerSheet(
+            onStickerSelected: (sticker) => _sendSticker(sticker),
+          ),
     );
   }
 
@@ -706,9 +750,9 @@ class _ChatScreenState extends State<ChatScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (context) => ClipPickerSheet(
-        onClipSelected: (clip) => _sendClip(clip),
-      ),
+      builder:
+          (context) =>
+              ClipPickerSheet(onClipSelected: (clip) => _sendClip(clip)),
     );
   }
 
@@ -743,7 +787,10 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _deleteAllMessages() async {
     try {
       // Soft delete from local database
-      await MessageDatabase.deleteConversation(widget.conversationId, userId: _currentUserId);
+      await MessageDatabase.deleteConversation(
+        widget.conversationId,
+        userId: _currentUserId,
+      );
 
       // Clear messages from UI
       if (mounted) {
@@ -753,7 +800,9 @@ class _ChatScreenState extends State<ChatScreen> {
       }
 
       if (kDebugMode) {
-        print('Soft-deleted all messages for conversation: ${widget.conversationId}');
+        print(
+          'Soft-deleted all messages for conversation: ${widget.conversationId}',
+        );
       }
 
       // Show success message
@@ -825,7 +874,9 @@ class _ChatScreenState extends State<ChatScreen> {
     );
 
     setState(() {
-      final index = _messages.indexWhere((m) => m.messageId == message.messageId);
+      final index = _messages.indexWhere(
+        (m) => m.messageId == message.messageId,
+      );
       if (index != -1) {
         _messages[index] = updatedMessage;
       }
@@ -846,7 +897,9 @@ class _ChatScreenState extends State<ChatScreen> {
       await MessageDatabase.insertMessage(updatedMessage);
 
       if (kDebugMode) {
-        print('Updated message position: ${message.messageId} to ($percentX, $percentY)');
+        print(
+          'Updated message position: ${message.messageId} to ($percentX, $percentY)',
+        );
       }
 
       // Sync to server via WebSocket
@@ -893,7 +946,9 @@ class _ChatScreenState extends State<ChatScreen> {
     );
 
     setState(() {
-      final index = _messages.indexWhere((m) => m.messageId == message.messageId);
+      final index = _messages.indexWhere(
+        (m) => m.messageId == message.messageId,
+      );
       if (index != -1) {
         _messages[index] = updatedMessage;
       }
@@ -914,7 +969,9 @@ class _ChatScreenState extends State<ChatScreen> {
       await MessageDatabase.insertMessage(updatedMessage);
 
       if (kDebugMode) {
-        print('Updated message transform: ${message.messageId} to ($percentX, $percentY), rotation: $rotation, scale: $scale');
+        print(
+          'Updated message transform: ${message.messageId} to ($percentX, $percentY), rotation: $rotation, scale: $scale',
+        );
       }
 
       // Sync to server via WebSocket
@@ -984,9 +1041,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 CircleAvatar(
                   radius: 18,
                   backgroundColor: AppColors.surface,
-                  backgroundImage: widget.friendProfilePicture != null
-                      ? NetworkImage(widget.friendProfilePicture!)
-                      : const AssetImage('assets/noprofile.png') as ImageProvider,
+                  backgroundImage:
+                      widget.friendProfilePicture != null
+                          ? NetworkImage(widget.friendProfilePicture!)
+                          : const AssetImage('assets/noprofile.png')
+                              as ImageProvider,
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1018,54 +1077,63 @@ class _ChatScreenState extends State<ChatScreen> {
         actions: [
           PullDownButton(
             position: PullDownMenuPosition.automatic,
-            itemBuilder: (context) => [
-              PullDownMenuItem(
-                onTap: () {
-                  setState(() {
-                    _isDebugging = !_isDebugging;
-                  });
-                },
-                title: 'Debugging',
-                icon: _isDebugging ? Icons.check_box : Icons.check_box_outline_blank,
-              ),
-              PullDownMenuItem(
-                onTap: () {
-                  // Debug WebSocket connection
-                  if (kDebugMode) {
-                    print('=== WebSocket Debug Info ===');
-                    print('Connected: ${widget.apiService.isConnected}');
-                    print('Socket ID: ${widget.apiService.socketId}');
-                    print('User UUID: ${widget.apiService.uuid}');
-                    print('Conversation ID: ${widget.conversationId}');
-                    print('Current User ID: $_currentUserId');
-                    print('Friend ID: ${widget.friendId}');
-                    print('Messages count: ${_messages.length}');
-                    print('===========================');
-                  }
+            itemBuilder:
+                (context) => [
+                  PullDownMenuItem(
+                    onTap: () {
+                      setState(() {
+                        _isDebugging = !_isDebugging;
+                      });
+                    },
+                    title: 'Debugging',
+                    icon:
+                        _isDebugging
+                            ? Icons.check_box
+                            : Icons.check_box_outline_blank,
+                  ),
+                  PullDownMenuItem(
+                    onTap: () {
+                      // Debug WebSocket connection
+                      if (kDebugMode) {
+                        print('=== WebSocket Debug Info ===');
+                        print('Connected: ${widget.apiService.isConnected}');
+                        print('Socket ID: ${widget.apiService.socketId}');
+                        print('User UUID: ${widget.apiService.uuid}');
+                        print('Conversation ID: ${widget.conversationId}');
+                        print('Current User ID: $_currentUserId');
+                        print('Friend ID: ${widget.friendId}');
+                        print('Messages count: ${_messages.length}');
+                        print('===========================');
+                      }
 
-                  // Show connection status to user
-                  Fluttertoast.showToast(
-                    msg: 'WebSocket: ${widget.apiService.isConnected ? "Connected ✅" : "Disconnected ❌"}',
-                    toastLength: Toast.LENGTH_LONG,
-                    gravity: ToastGravity.TOP,
-                    backgroundColor: widget.apiService.isConnected ? Colors.green : Colors.red,
-                    textColor: Colors.white,
-                    fontSize: 14.0,
-                  );
-                },
-                title: 'WebSocket Status',
-                icon: Icons.wifi,
-              ),
-              PullDownMenuItem(
-                onTap: _deleteAllMessages,
-                title: 'Delete Messages',
-                isDestructive: true,
-              ),
-            ],
-            buttonBuilder: (context, showMenu) => IconButton(
-              icon: const Icon(Icons.more_vert, color: Colors.white),
-              onPressed: showMenu,
-            ),
+                      // Show connection status to user
+                      Fluttertoast.showToast(
+                        msg:
+                            'WebSocket: ${widget.apiService.isConnected ? "Connected ✅" : "Disconnected ❌"}',
+                        toastLength: Toast.LENGTH_LONG,
+                        gravity: ToastGravity.TOP,
+                        backgroundColor:
+                            widget.apiService.isConnected
+                                ? Colors.green
+                                : Colors.red,
+                        textColor: Colors.white,
+                        fontSize: 14.0,
+                      );
+                    },
+                    title: 'WebSocket Status',
+                    icon: Icons.wifi,
+                  ),
+                  PullDownMenuItem(
+                    onTap: _deleteAllMessages,
+                    title: 'Delete Messages',
+                    isDestructive: true,
+                  ),
+                ],
+            buttonBuilder:
+                (context, showMenu) => IconButton(
+                  icon: const Icon(Icons.more_vert, color: Colors.white),
+                  onPressed: showMenu,
+                ),
           ),
         ],
       ),
@@ -1073,118 +1141,136 @@ class _ChatScreenState extends State<ChatScreen> {
         children: [
           // Message list (everything scrolls together) - Full height
           GestureDetector(
-              onTap: () {
-                // Dismiss keyboard when tapping on messages area
-                FocusScope.of(context).unfocus();
-              },
-              behavior: HitTestBehavior.translucent,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  // Separate messages into normal and positioned
-                  final normalMessages = _messages.where((m) => !m.isPositioned).toList();
-                  final positionedMessages = _messages.where((m) => m.isPositioned).toList();
+            onTap: () {
+              // Dismiss keyboard when tapping on messages area
+              FocusScope.of(context).unfocus();
+            },
+            behavior: HitTestBehavior.translucent,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // Separate messages into normal and positioned
+                final normalMessages =
+                    _messages.where((m) => !m.isPositioned).toList();
+                final positionedMessages =
+                    _messages.where((m) => m.isPositioned).toList();
 
-                  // Capture stable viewport height on first build (keyboard hidden)
-                  if (_stableViewportHeight == null || constraints.maxHeight > _stableViewportHeight!) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) {
+                // Capture stable viewport height on first build (keyboard hidden)
+                if (_stableViewportHeight == null ||
+                    constraints.maxHeight > _stableViewportHeight!) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) {
+                      setState(() {
+                        _stableViewportHeight = constraints.maxHeight;
+                      });
+                    }
+                  });
+                }
+                final viewportHeight =
+                    _stableViewportHeight ?? constraints.maxHeight;
+                final viewportWidth = constraints.maxWidth;
+
+                // Calculate total content height needed
+                // This includes space for normal messages + positioned messages
+                double maxPositionedY = 0;
+                for (var msg in positionedMessages) {
+                  final msgY = (msg.positionY ?? 0.5) * viewportHeight;
+                  if (msgY > maxPositionedY) maxPositionedY = msgY;
+                }
+
+                // Estimate height needed (will be adjusted by Stack's intrinsic size)
+
+                return SingleChildScrollView(
+                  controller: _scrollController,
+                  physics:
+                      (_isDraggingActive ||
+                              _isDrawingMode ||
+                              _transformingMessageId != null)
+                          ? const NeverScrollableScrollPhysics()
+                          : const AlwaysScrollableScrollPhysics(),
+                  child: Listener(
+                    // Global listener to track all pointers when transforming
+                    behavior: HitTestBehavior.translucent,
+                    onPointerDown: (details) {
+                      if (_transformingMessageId != null) {
                         setState(() {
-                          _stableViewportHeight = constraints.maxHeight;
+                          _activePointers[details.pointer] = details.position;
+                          if (_activePointers.length == 2) {
+                            final pointers = _activePointers.values.toList();
+                            _initialDistance = _calculateDistance(
+                              pointers[0],
+                              pointers[1],
+                            );
+                            _initialAngle = _calculateAngle(
+                              pointers[0],
+                              pointers[1],
+                            );
+                          }
                         });
                       }
-                    });
-                  }
-                  final viewportHeight = _stableViewportHeight ?? constraints.maxHeight;
-                  final viewportWidth = constraints.maxWidth;
+                    },
+                    onPointerMove: (details) {
+                      if (_transformingMessageId != null) {
+                        setState(() {
+                          _activePointers[details.pointer] = details.position;
+                        });
+                      }
+                    },
+                    onPointerUp: (details) {
+                      if (_transformingMessageId != null) {
+                        // Check if this is the last pointer BEFORE removing
+                        final wasLastPointer = _activePointers.length == 1;
 
-                  // Calculate total content height needed
-                  // This includes space for normal messages + positioned messages
-                  double maxPositionedY = 0;
-                  for (var msg in positionedMessages) {
-                    final msgY = (msg.positionY ?? 0.5) * viewportHeight;
-                    if (msgY > maxPositionedY) maxPositionedY = msgY;
-                  }
+                        setState(() {
+                          _activePointers.remove(details.pointer);
 
-                  // Estimate height needed (will be adjusted by Stack's intrinsic size)
-
-                  return SingleChildScrollView(
-                    controller: _scrollController,
-                    physics: (_isDraggingActive || _isDrawingMode || _transformingMessageId != null) ? const NeverScrollableScrollPhysics() : const AlwaysScrollableScrollPhysics(),
-                    child: Listener(
-                      // Global listener to track all pointers when transforming
-                      behavior: HitTestBehavior.translucent,
-                      onPointerDown: (details) {
-                        if (_transformingMessageId != null) {
-                          setState(() {
-                            _activePointers[details.pointer] = details.position;
-                            if (_activePointers.length == 2) {
-                              final pointers = _activePointers.values.toList();
-                              _initialDistance = _calculateDistance(pointers[0], pointers[1]);
-                              _initialAngle = _calculateAngle(pointers[0], pointers[1]);
-                            }
-                          });
-                        }
-                      },
-                      onPointerMove: (details) {
-                        if (_transformingMessageId != null) {
-                          setState(() {
-                            _activePointers[details.pointer] = details.position;
-                          });
-                        }
-                      },
-                      onPointerUp: (details) {
-                        if (_transformingMessageId != null) {
-                          // Check if this is the last pointer BEFORE removing
-                          final wasLastPointer = _activePointers.length == 1;
-
-                          setState(() {
-                            _activePointers.remove(details.pointer);
-
-                            // If local listener didn't clear transform (pointer outside widget), clear it here
-                            if (wasLastPointer && _activePointers.isEmpty && _transformingMessageId != null) {
-                              _transformingMessageId = null;
-                              _firstPointerId = null;
-                              _dragOffset = Offset.zero;
-                              _currentRotation = 0.0;
-                              _currentScale = 1.0;
-                              _initialDistance = 0.0;
-                              _initialAngle = 0.0;
-                            }
-                          });
-                        }
-                      },
-                      onPointerCancel: (details) {
-                        if (_transformingMessageId != null) {
-                          setState(() {
-                            _activePointers.remove(details.pointer);
-                            if (_activePointers.isEmpty) {
-                              _transformingMessageId = null;
-                              _firstPointerId = null;
-                              _dragOffset = Offset.zero;
-                              _currentRotation = 0.0;
-                              _currentScale = 1.0;
-                              _initialDistance = 0.0;
-                              _initialAngle = 0.0;
-                            }
-                          });
-                        }
-                      },
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          minHeight: constraints.maxHeight,
-                        ),
-                        child: Stack(
-                          key: _stackKey,
-                          children: [
+                          // If local listener didn't clear transform (pointer outside widget), clear it here
+                          if (wasLastPointer &&
+                              _activePointers.isEmpty &&
+                              _transformingMessageId != null) {
+                            _transformingMessageId = null;
+                            _firstPointerId = null;
+                            _dragOffset = Offset.zero;
+                            _currentRotation = 0.0;
+                            _currentScale = 1.0;
+                            _initialDistance = 0.0;
+                            _initialAngle = 0.0;
+                          }
+                        });
+                      }
+                    },
+                    onPointerCancel: (details) {
+                      if (_transformingMessageId != null) {
+                        setState(() {
+                          _activePointers.remove(details.pointer);
+                          if (_activePointers.isEmpty) {
+                            _transformingMessageId = null;
+                            _firstPointerId = null;
+                            _dragOffset = Offset.zero;
+                            _currentRotation = 0.0;
+                            _currentScale = 1.0;
+                            _initialDistance = 0.0;
+                            _initialAngle = 0.0;
+                          }
+                        });
+                      }
+                    },
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: constraints.maxHeight,
+                      ),
+                      child: Stack(
+                        key: _stackKey,
+                        children: [
                           // Normal messages in a Column (flows naturally)
                           // Includes spacers for positioned messages to prevent overlap
                           Padding(
                             padding: EdgeInsets.only(
                               top: Spacing.md,
                               // When keyboard is open, add 50% screen height padding so user can scroll to see latest messages
-                              bottom: MediaQuery.of(context).viewInsets.bottom > 0
-                                  ? MediaQuery.of(context).size.height * 0.5
-                                  : 100, // Extra padding so messages aren't hidden behind controls
+                              bottom:
+                                  MediaQuery.of(context).viewInsets.bottom > 0
+                                      ? MediaQuery.of(context).size.height * 0.5
+                                      : 100, // Extra padding so messages aren't hidden behind controls
                               left: 8,
                               right: 8,
                             ),
@@ -1209,17 +1295,29 @@ class _ChatScreenState extends State<ChatScreen> {
                                     items.add(
                                       Center(
                                         child: Padding(
-                                          padding: const EdgeInsets.only(top: 4, bottom: 4),
+                                          padding: const EdgeInsets.only(
+                                            top: 4,
+                                            bottom: 4,
+                                          ),
                                           child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 6,
+                                            ),
                                             decoration: BoxDecoration(
-                                              color: Colors.grey.shade900.withOpacity(0),
-                                              borderRadius: BorderRadius.circular(12),
+                                              color: Colors.grey.shade900
+                                                  .withOpacity(0),
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
                                             ),
                                             child: Text(
-                                              _getDateTimeLabel(_messages.first.timestamp),
+                                              _getDateTimeLabel(
+                                                _messages.first.timestamp,
+                                              ),
                                               style: TextStyle(
-                                                color: Colors.white.withOpacity(0.7),
+                                                color: Colors.white.withOpacity(
+                                                  0.7,
+                                                ),
                                                 fontSize: 11,
                                                 fontWeight: FontWeight.w500,
                                               ),
@@ -1232,7 +1330,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                   int normalIndex = 0;
 
                                   // Track Y ranges already covered by spacers to avoid overlaps
-                                  final List<Map<String, double>> spacerRanges = [];
+                                  final List<Map<String, double>> spacerRanges =
+                                      [];
 
                                   // Track actual accumulated height (not just count * 80)
                                   double accumulatedHeight = 0;
@@ -1244,70 +1343,111 @@ class _ChatScreenState extends State<ChatScreen> {
                                       // Get the Y position and height of this positioned message
                                       // For spacer calculation, always use the stored position (not drag offset)
                                       // This keeps spacers stable even when dragging the message again
-                                      final msgY = (msg.positionY ?? 0.5) * viewportHeight;
+                                      final msgY =
+                                          (msg.positionY ?? 0.5) *
+                                          viewportHeight;
 
                                       double msgHeight;
                                       if (msg.messageType == 'gif') {
                                         // For GIF messages, calculate height based on original dimensions
                                         final metadata = msg.metadata;
-                                        final gifWidth = (metadata?['width'] as num?)?.toDouble() ?? 200.0;
-                                        final gifHeight = (metadata?['height'] as num?)?.toDouble() ?? 200.0;
+                                        final gifWidth =
+                                            (metadata?['width'] as num?)
+                                                ?.toDouble() ??
+                                            200.0;
+                                        final gifHeight =
+                                            (metadata?['height'] as num?)
+                                                ?.toDouble() ??
+                                            200.0;
 
-                                        final maxDisplayWidth = viewportWidth * 0.6;
-                                        final maxDisplayHeight = viewportHeight * 0.4;
+                                        final maxDisplayWidth =
+                                            viewportWidth * 0.6;
+                                        final maxDisplayHeight =
+                                            viewportHeight * 0.4;
 
                                         double displayWidth = gifWidth;
                                         double displayHeight = gifHeight;
 
                                         // Scale down if too large
                                         if (displayWidth > maxDisplayWidth) {
-                                          final scale = maxDisplayWidth / displayWidth;
+                                          final scale =
+                                              maxDisplayWidth / displayWidth;
                                           displayWidth = maxDisplayWidth;
                                           displayHeight = displayHeight * scale;
                                         }
 
                                         if (displayHeight > maxDisplayHeight) {
-                                          final scale = maxDisplayHeight / displayHeight;
+                                          final scale =
+                                              maxDisplayHeight / displayHeight;
                                           displayHeight = maxDisplayHeight;
                                           displayWidth = displayWidth * scale;
                                         }
 
-                                        msgHeight = displayHeight.clamp(100.0, maxDisplayHeight);
+                                        msgHeight = displayHeight.clamp(
+                                          100.0,
+                                          maxDisplayHeight,
+                                        );
                                       } else if (msg.messageType == 'sticker') {
                                         // For sticker messages, calculate height based on original dimensions
                                         final metadata = msg.metadata;
-                                        final stickerWidth = (metadata?['width'] as num?)?.toDouble() ?? 200.0;
-                                        final stickerHeight = (metadata?['height'] as num?)?.toDouble() ?? 200.0;
+                                        final stickerWidth =
+                                            (metadata?['width'] as num?)
+                                                ?.toDouble() ??
+                                            200.0;
+                                        final stickerHeight =
+                                            (metadata?['height'] as num?)
+                                                ?.toDouble() ??
+                                            200.0;
 
-                                        final maxDisplayWidth = viewportWidth * 0.5;
-                                        final maxDisplayHeight = viewportHeight * 0.35;
+                                        final maxDisplayWidth =
+                                            viewportWidth * 0.5;
+                                        final maxDisplayHeight =
+                                            viewportHeight * 0.35;
 
                                         double displayWidth = stickerWidth;
                                         double displayHeight = stickerHeight;
 
                                         // Scale down if too large
                                         if (displayWidth > maxDisplayWidth) {
-                                          final scale = maxDisplayWidth / displayWidth;
+                                          final scale =
+                                              maxDisplayWidth / displayWidth;
                                           displayWidth = maxDisplayWidth;
                                           displayHeight = displayHeight * scale;
                                         }
 
                                         if (displayHeight > maxDisplayHeight) {
-                                          final scale = maxDisplayHeight / displayHeight;
+                                          final scale =
+                                              maxDisplayHeight / displayHeight;
                                           displayHeight = maxDisplayHeight;
                                           displayWidth = displayWidth * scale;
                                         }
 
-                                        msgHeight = displayHeight.clamp(80.0, maxDisplayHeight);
+                                        msgHeight = displayHeight.clamp(
+                                          80.0,
+                                          maxDisplayHeight,
+                                        );
                                       } else if (msg.messageType == 'drawing') {
                                         // For drawings, use bounds from metadata
                                         final metadata = msg.metadata;
-                                        if (metadata != null && metadata['bounds'] != null) {
-                                          final bounds = metadata['bounds'] as Map<String, dynamic>;
-                                          final minY = (bounds['minY'] as num?)?.toDouble() ?? 0.0;
-                                          final maxY = (bounds['maxY'] as num?)?.toDouble() ?? 0.1;
-                                          final drawingHeight = (maxY - minY) * viewportHeight;
-                                          msgHeight = drawingHeight.clamp(50.0, viewportHeight).toDouble();
+                                        if (metadata != null &&
+                                            metadata['bounds'] != null) {
+                                          final bounds =
+                                              metadata['bounds']
+                                                  as Map<String, dynamic>;
+                                          final minY =
+                                              (bounds['minY'] as num?)
+                                                  ?.toDouble() ??
+                                              0.0;
+                                          final maxY =
+                                              (bounds['maxY'] as num?)
+                                                  ?.toDouble() ??
+                                              0.1;
+                                          final drawingHeight =
+                                              (maxY - minY) * viewportHeight;
+                                          msgHeight =
+                                              drawingHeight
+                                                  .clamp(50.0, viewportHeight)
+                                                  .toDouble();
                                         } else {
                                           msgHeight = 80;
                                         }
@@ -1315,9 +1455,12 @@ class _ChatScreenState extends State<ChatScreen> {
                                         // For text messages, estimate height based on text length
                                         // Assume max width is 75% of screen, ~45 characters per line at 15px font
                                         final textLength = msg.message.length;
-                                        final estimatedLines = (textLength / 45).ceil().clamp(1, 10);
+                                        final estimatedLines = (textLength / 45)
+                                            .ceil()
+                                            .clamp(1, 10);
                                         // Line height is ~21px (15px font * 1.4 line height), plus padding (16px top/bottom)
-                                        msgHeight = (estimatedLines * 21.0) + 16;
+                                        msgHeight =
+                                            (estimatedLines * 21.0) + 16;
                                       }
 
                                       // Store base (unscaled) height for locked spacers
@@ -1331,21 +1474,29 @@ class _ChatScreenState extends State<ChatScreen> {
                                       final msgBottomY = msgY + (msgHeight / 2);
 
                                       // Check if this Y range is already covered by an existing spacer
-                                      final isAlreadyCovered = spacerRanges.any((range) {
-                                        return msgTopY >= range['top']! && msgBottomY <= range['bottom']!;
-                                      });
+                                      final isAlreadyCovered = spacerRanges.any(
+                                        (range) {
+                                          return msgTopY >= range['top']! &&
+                                              msgBottomY <= range['bottom']!;
+                                        },
+                                      );
 
                                       if (!isAlreadyCovered) {
                                         // Use actual accumulated height instead of items.length * 80
-                                        final estimatedCurrentY = accumulatedHeight;
+                                        final estimatedCurrentY =
+                                            accumulatedHeight;
 
                                         // Create spacers for positioned messages (drawings and text)
                                         // Create spacer if message is at or near the current flow position
                                         // Use a threshold to account for estimation errors
-                                        final threshold = msgHeight; // If message is within its own height of flow, create spacer
-                                        if (msgBottomY >= estimatedCurrentY - threshold) {
+                                        final threshold =
+                                            msgHeight; // If message is within its own height of flow, create spacer
+                                        if (msgBottomY >=
+                                            estimatedCurrentY - threshold) {
                                           // Check if there are normal messages below this positioned message in the list
-                                          final hasMessagesBelow = _messages.skip(i + 1).any((m) => !m.isPositioned);
+                                          final hasMessagesBelow = _messages
+                                              .skip(i + 1)
+                                              .any((m) => !m.isPositioned);
 
                                           final double spacerHeight;
                                           if (hasMessagesBelow) {
@@ -1354,7 +1505,14 @@ class _ChatScreenState extends State<ChatScreen> {
                                             spacerHeight = baseHeight + 45;
                                           } else {
                                             // No messages below - spacer can dynamically adjust based on message position
-                                            spacerHeight = ((msgBottomY - estimatedCurrentY).clamp(0.0, double.infinity)) + 5;
+                                            spacerHeight =
+                                                ((msgBottomY -
+                                                        estimatedCurrentY)
+                                                    .clamp(
+                                                      0.0,
+                                                      double.infinity,
+                                                    )) +
+                                                5;
                                           }
 
                                           // if (kDebugMode) {
@@ -1377,18 +1535,37 @@ class _ChatScreenState extends State<ChatScreen> {
                                             items.add(
                                               IgnorePointer(
                                                 child: Container(
-                                                  key: ValueKey('spacer_${msg.messageId}'),
+                                                  key: ValueKey(
+                                                    'spacer_${msg.messageId}',
+                                                  ),
                                                   height: spacerHeight,
-                                                  decoration: _isDebugging ? BoxDecoration(
-                                                    border: Border.all(color: Colors.green, width: 2),
-                                                  ) : null,
-                                                  child: _isDebugging ? Center(
-                                                    child: Text(
-                                                      'SPACER for ${msg.messageId}\nType: ${msg.messageType}\nHeight: ${spacerHeight.toStringAsFixed(0)}px\nMsg Top Y: ${msgTopY.toStringAsFixed(0)}px\nMsg Bottom Y: ${msgBottomY.toStringAsFixed(0)}px\nEst Flow Y: ${estimatedCurrentY.toStringAsFixed(0)}px',
-                                                      style: TextStyle(color: Colors.green, fontSize: 10),
-                                                      textAlign: TextAlign.center,
-                                                    ),
-                                                  ) : null,
+                                                  decoration:
+                                                      _isDebugging
+                                                          ? BoxDecoration(
+                                                            border: Border.all(
+                                                              color:
+                                                                  Colors.green,
+                                                              width: 2,
+                                                            ),
+                                                          )
+                                                          : null,
+                                                  child:
+                                                      _isDebugging
+                                                          ? Center(
+                                                            child: Text(
+                                                              'SPACER for ${msg.messageId}\nType: ${msg.messageType}\nHeight: ${spacerHeight.toStringAsFixed(0)}px\nMsg Top Y: ${msgTopY.toStringAsFixed(0)}px\nMsg Bottom Y: ${msgBottomY.toStringAsFixed(0)}px\nEst Flow Y: ${estimatedCurrentY.toStringAsFixed(0)}px',
+                                                              style: TextStyle(
+                                                                color:
+                                                                    Colors
+                                                                        .green,
+                                                                fontSize: 10,
+                                                              ),
+                                                              textAlign:
+                                                                  TextAlign
+                                                                      .center,
+                                                            ),
+                                                          )
+                                                          : null,
                                                 ),
                                               ),
                                             );
@@ -1400,7 +1577,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                       }
                                     } else {
                                       // Add normal message
-                                      final message = normalMessages[normalIndex];
+                                      final message =
+                                          normalMessages[normalIndex];
 
                                       // Check if this is a system message (e.g., "User cleared the chat")
                                       // Always show system messages
@@ -1408,12 +1586,22 @@ class _ChatScreenState extends State<ChatScreen> {
                                         items.add(
                                           Center(
                                             child: Padding(
-                                              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 4,
+                                                    horizontal: 16,
+                                                  ),
                                               child: Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 4,
+                                                      vertical: 6,
+                                                    ),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.grey.shade900.withValues(alpha: 0),
-                                                  borderRadius: BorderRadius.circular(12),
+                                                  color: Colors.grey.shade900
+                                                      .withValues(alpha: 0),
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
                                                 ),
                                                 child: Text(
                                                   message.message,
@@ -1432,34 +1620,67 @@ class _ChatScreenState extends State<ChatScreen> {
                                         continue;
                                       }
 
-                                      final isMe = message.senderId == _currentUserId;
-                                      final isLastMessage = _messages.isNotEmpty &&
-                                          _messages.last.messageId == message.messageId;
+                                      final isMe =
+                                          message.senderId == _currentUserId;
+                                      final isLastMessage =
+                                          _messages.isNotEmpty &&
+                                          _messages.last.messageId ==
+                                              message.messageId;
 
-                                      final isFirstInGroup = normalIndex == 0 ||
-                                          normalMessages[normalIndex - 1].senderId != message.senderId;
-                                      final isLastInGroup = normalIndex == normalMessages.length - 1 ||
-                                          normalMessages[normalIndex + 1].senderId != message.senderId;
+                                      final isFirstInGroup =
+                                          normalIndex == 0 ||
+                                          normalMessages[normalIndex - 1]
+                                                  .senderId !=
+                                              message.senderId;
+                                      final isLastInGroup =
+                                          normalIndex ==
+                                              normalMessages.length - 1 ||
+                                          normalMessages[normalIndex + 1]
+                                                  .senderId !=
+                                              message.senderId;
 
                                       // Check if this is the last message in a time cluster (5 minutes)
-                                      final showTimestamp = normalIndex == normalMessages.length - 1 ||
-                                          normalMessages[normalIndex + 1].senderId != message.senderId ||
-                                          !_isWithinTimeCluster(message, normalMessages[normalIndex + 1]);
+                                      final showTimestamp =
+                                          normalIndex ==
+                                              normalMessages.length - 1 ||
+                                          normalMessages[normalIndex + 1]
+                                                  .senderId !=
+                                              message.senderId ||
+                                          !_isWithinTimeCluster(
+                                            message,
+                                            normalMessages[normalIndex + 1],
+                                          );
 
                                       // Add centered timestamp separator if there's a 5+ minute gap from previous message
-                                      if (normalIndex > 0 && !_isWithinTimeCluster(normalMessages[normalIndex - 1], message)) {
+                                      if (normalIndex > 0 &&
+                                          !_isWithinTimeCluster(
+                                            normalMessages[normalIndex - 1],
+                                            message,
+                                          )) {
                                         items.add(
                                           Center(
                                             child: Padding(
-                                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 12,
+                                                    horizontal: 16,
+                                                  ),
                                               child: Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 6,
+                                                    ),
                                                 decoration: BoxDecoration(
-                                                  color: Colors.grey.shade900.withValues(alpha: 0),
-                                                  borderRadius: BorderRadius.circular(12),
+                                                  color: Colors.grey.shade900
+                                                      .withValues(alpha: 0),
+                                                  borderRadius:
+                                                      BorderRadius.circular(12),
                                                 ),
                                                 child: Text(
-                                                  _getDateTimeLabel(message.timestamp),
+                                                  _getDateTimeLabel(
+                                                    message.timestamp,
+                                                  ),
                                                   style: TextStyle(
                                                     color: Colors.grey.shade400,
                                                     fontSize: 11,
@@ -1471,45 +1692,84 @@ class _ChatScreenState extends State<ChatScreen> {
                                             ),
                                           ),
                                         );
-                                        accumulatedHeight += 50; // Account for timestamp separator height
+                                        accumulatedHeight +=
+                                            50; // Account for timestamp separator height
                                       }
 
                                       items.add(
                                         GestureDetector(
-                                          key: ValueKey('gesture_${message.messageId}'),
+                                          key: ValueKey(
+                                            'gesture_${message.messageId}',
+                                          ),
                                           behavior: HitTestBehavior.opaque,
-                                          onLongPress: isMe ? () {
-                                            if (kDebugMode) {
-                                              print('🟡 NORMAL message ${message.messageId} received LONG PRESS - converting to positioned');
-                                            }
-                                            final RenderBox? stackBox = _stackKey.currentContext?.findRenderObject() as RenderBox?;
-                                            if (stackBox == null) return;
+                                          onLongPress:
+                                              isMe
+                                                  ? () {
+                                                    if (kDebugMode) {
+                                                      print(
+                                                        '🟡 NORMAL message ${message.messageId} received LONG PRESS - converting to positioned',
+                                                      );
+                                                    }
+                                                    final RenderBox? stackBox =
+                                                        _stackKey.currentContext
+                                                                ?.findRenderObject()
+                                                            as RenderBox?;
+                                                    if (stackBox == null)
+                                                      return;
 
-                                            final renderBox = context.findRenderObject() as RenderBox?;
-                                            if (renderBox == null) return;
+                                                    final renderBox =
+                                                        context.findRenderObject()
+                                                            as RenderBox?;
+                                                    if (renderBox == null)
+                                                      return;
 
-                                            final stackPosition = stackBox.localToGlobal(Offset.zero);
-                                            final bubblePosition = renderBox.localToGlobal(Offset.zero);
+                                                    final stackPosition =
+                                                        stackBox.localToGlobal(
+                                                          Offset.zero,
+                                                        );
+                                                    final bubblePosition =
+                                                        renderBox.localToGlobal(
+                                                          Offset.zero,
+                                                        );
 
-                                            final relativeX = bubblePosition.dx - stackPosition.dx + (renderBox.size.width / 2);
-                                            final relativeY = bubblePosition.dy - stackPosition.dy + (renderBox.size.height / 2);
+                                                    final relativeX =
+                                                        bubblePosition.dx -
+                                                        stackPosition.dx +
+                                                        (renderBox.size.width /
+                                                            2);
+                                                    final relativeY =
+                                                        bubblePosition.dy -
+                                                        stackPosition.dy +
+                                                        (renderBox.size.height /
+                                                            2);
 
-                                            // Add scroll offset to get position in content coordinates
-                                            final scrollOffset = _scrollController.hasClients ? _scrollController.offset : 0.0;
-                                            final contentY = relativeY + scrollOffset;
+                                                    // Add scroll offset to get position in content coordinates
+                                                    final scrollOffset =
+                                                        _scrollController
+                                                                .hasClients
+                                                            ? _scrollController
+                                                                .offset
+                                                            : 0.0;
+                                                    final contentY =
+                                                        relativeY +
+                                                        scrollOffset;
 
-                                            final viewportWidth = stackBox.size.width;
+                                                    final viewportWidth =
+                                                        stackBox.size.width;
 
-                                            _updateMessagePosition(
-                                              message,
-                                              relativeX,
-                                              contentY,
-                                              viewportWidth,
-                                              viewportHeight,
-                                            );
-                                          } : null,
+                                                    _updateMessagePosition(
+                                                      message,
+                                                      relativeX,
+                                                      contentY,
+                                                      viewportWidth,
+                                                      viewportHeight,
+                                                    );
+                                                  }
+                                                  : null,
                                           child: _MessageBubbleWithGradient(
-                                            key: ValueKey('normal_${message.messageId}'),
+                                            key: ValueKey(
+                                              'normal_${message.messageId}',
+                                            ),
                                             message: message,
                                             isMe: isMe,
                                             isLastMessage: isLastMessage,
@@ -1522,7 +1782,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                       );
 
                                       // Update accumulated height with estimated message height
-                                      accumulatedHeight += 80; // Average message height
+                                      accumulatedHeight +=
+                                          80; // Average message height
 
                                       normalIndex++;
                                     }
@@ -1542,19 +1803,29 @@ class _ChatScreenState extends State<ChatScreen> {
                               child: GestureDetector(
                                 behavior: HitTestBehavior.opaque,
                                 onPanDown: (details) {
-                                  final renderBox = context.findRenderObject() as RenderBox;
-                                  final localPosition = renderBox.globalToLocal(details.globalPosition);
+                                  final renderBox =
+                                      context.findRenderObject() as RenderBox;
+                                  final localPosition = renderBox.globalToLocal(
+                                    details.globalPosition,
+                                  );
 
                                   // Add scroll offset to get position in content coordinates
-                                  final scrollOffset = _scrollController.hasClients ? _scrollController.offset : 0.0;
-                                  final contentY = localPosition.dy + scrollOffset;
+                                  final scrollOffset =
+                                      _scrollController.hasClients
+                                          ? _scrollController.offset
+                                          : 0.0;
+                                  final contentY =
+                                      localPosition.dy + scrollOffset;
 
                                   setState(() {
                                     _currentStroke = DrawingStroke(
-                                      points: [Offset(
-                                        localPosition.dx / constraints.maxWidth,
-                                        contentY / viewportHeight,
-                                      )],
+                                      points: [
+                                        Offset(
+                                          localPosition.dx /
+                                              constraints.maxWidth,
+                                          contentY / viewportHeight,
+                                        ),
+                                      ],
                                       color: _selectedColor,
                                       brushType: _selectedBrush,
                                     );
@@ -1562,23 +1833,33 @@ class _ChatScreenState extends State<ChatScreen> {
                                 },
                                 onPanUpdate: (details) {
                                   if (_currentStroke != null) {
-                                    final renderBox = context.findRenderObject() as RenderBox;
-                                    final localPosition = renderBox.globalToLocal(details.globalPosition);
+                                    final renderBox =
+                                        context.findRenderObject() as RenderBox;
+                                    final localPosition = renderBox
+                                        .globalToLocal(details.globalPosition);
 
                                     // Add scroll offset to get position in content coordinates
-                                    final scrollOffset = _scrollController.hasClients ? _scrollController.offset : 0.0;
-                                    final contentY = localPosition.dy + scrollOffset;
+                                    final scrollOffset =
+                                        _scrollController.hasClients
+                                            ? _scrollController.offset
+                                            : 0.0;
+                                    final contentY =
+                                        localPosition.dy + scrollOffset;
 
                                     setState(() {
-                                      _currentStroke!.points.add(Offset(
-                                        localPosition.dx / constraints.maxWidth,
-                                        contentY / viewportHeight,
-                                      ));
+                                      _currentStroke!.points.add(
+                                        Offset(
+                                          localPosition.dx /
+                                              constraints.maxWidth,
+                                          contentY / viewportHeight,
+                                        ),
+                                      );
                                     });
                                   }
                                 },
                                 onPanEnd: (details) {
-                                  if (_currentStroke != null && _currentStroke!.points.isNotEmpty) {
+                                  if (_currentStroke != null &&
+                                      _currentStroke!.points.isNotEmpty) {
                                     setState(() {
                                       _drawingStrokes.add(_currentStroke!);
                                       _currentStroke = null;
@@ -1586,7 +1867,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                   }
                                 },
                                 onPanCancel: () {
-                                  if (_currentStroke != null && _currentStroke!.points.isNotEmpty) {
+                                  if (_currentStroke != null &&
+                                      _currentStroke!.points.isNotEmpty) {
                                     setState(() {
                                       _drawingStrokes.add(_currentStroke!);
                                       _currentStroke = null;
@@ -1607,27 +1889,37 @@ class _ChatScreenState extends State<ChatScreen> {
                           // Positioned messages overlaid on the scrollable content
                           ...positionedMessages.map((message) {
                             final isMe = message.senderId == _currentUserId;
-                            final isLastMessage = _messages.isNotEmpty &&
+                            final isLastMessage =
+                                _messages.isNotEmpty &&
                                 _messages.last.messageId == message.messageId;
-                            final isDrawingOrGifOrStickerOrClip = message.messageType == 'drawing' || message.messageType == 'gif' || message.messageType == 'sticker' || message.messageType == 'clip';
+                            final isDrawingOrGifOrStickerOrClip =
+                                message.messageType == 'drawing' ||
+                                message.messageType == 'gif' ||
+                                message.messageType == 'sticker' ||
+                                message.messageType == 'clip';
 
                             // Calculate pixel position from percentage
                             // Mirror X position for messages from other users (applies to all message types)
-                            final posX = message.senderId != _currentUserId
-                                ? (1.0 - (message.positionX ?? 0.5))
-                                : (message.positionX ?? 0.5);
+                            final posX =
+                                message.senderId != _currentUserId
+                                    ? (1.0 - (message.positionX ?? 0.5))
+                                    : (message.positionX ?? 0.5);
 
                             // Mirror rotation for messages from other users (horizontal flip)
                             // Formula: -rotation (negates rotation like a mirror reflection)
                             // 45° clockwise becomes 45° counter-clockwise
-                            final mirroredRotation = message.senderId != _currentUserId
-                                ? (-(message.rotation ?? 0.0))
-                                : (message.rotation ?? 0.0);
+                            final mirroredRotation =
+                                message.senderId != _currentUserId
+                                    ? (-(message.rotation ?? 0.0))
+                                    : (message.rotation ?? 0.0);
 
-                            final top = (message.positionY ?? 0.5) * viewportHeight;
+                            final top =
+                                (message.positionY ?? 0.5) * viewportHeight;
                             final left = posX * constraints.maxWidth;
 
-                            final skipAnimation = _justDraggedMessages.contains(message.messageId);
+                            final skipAnimation = _justDraggedMessages.contains(
+                              message.messageId,
+                            );
 
                             // Build the child widget with IgnorePointer when in drawing mode
                             final Widget childWidget;
@@ -1635,44 +1927,63 @@ class _ChatScreenState extends State<ChatScreen> {
                             if (isDrawingOrGifOrStickerOrClip) {
                               // Check message type
                               final isGif = message.messageType == 'gif';
-                              final isSticker = message.messageType == 'sticker';
-                              final isClip = message.messageType == 'clip'; // New
+                              final isSticker =
+                                  message.messageType == 'sticker';
+                              final isClip =
+                                  message.messageType == 'clip'; // New
 
-                              final mediaWidget = isGif
-                                  ? _GifMessageWidget(
-                                      key: ValueKey('positioned_gif_${message.messageId}'),
-                                      message: message,
-                                      viewportWidth: constraints.maxWidth,
-                                      viewportHeight: viewportHeight,
-                                    )
-                                  : isSticker
+                              final mediaWidget =
+                                  isGif
+                                      ? _GifMessageWidget(
+                                        key: ValueKey(
+                                          'positioned_gif_${message.messageId}',
+                                        ),
+                                        message: message,
+                                        viewportWidth: constraints.maxWidth,
+                                        viewportHeight: viewportHeight,
+                                      )
+                                      : isSticker
                                       ? _StickerMessageWidget(
-                                          key: ValueKey('positioned_sticker_${message.messageId}'),
-                                          message: message,
-                                          viewportWidth: constraints.maxWidth,
-                                          viewportHeight: viewportHeight,
-                                        )
+                                        key: ValueKey(
+                                          'positioned_sticker_${message.messageId}',
+                                        ),
+                                        message: message,
+                                        viewportWidth: constraints.maxWidth,
+                                        viewportHeight: viewportHeight,
+                                      )
                                       : isClip
-                                          ? _ClipMessageWidget(
-                                              key: ValueKey('positioned_clip_${message.messageId}'),
-                                              message: message,
-                                              viewportWidth: constraints.maxWidth,
-                                              viewportHeight: viewportHeight,
-                                            )
-                                          : _DrawingMessageWidget(
-                                              key: ValueKey('positioned_drawing_${message.messageId}'),
-                                              message: message,
-                                              viewportWidth: constraints.maxWidth,
-                                              viewportHeight: viewportHeight,
-                                              isDebugging: _isDebugging,
-                                            );
+                                      ? _ClipMessageWidget(
+                                        key: ValueKey(
+                                          'positioned_clip_${message.messageId}',
+                                        ),
+                                        message: message,
+                                        viewportWidth: constraints.maxWidth,
+                                        viewportHeight: viewportHeight,
+                                      )
+                                      : _DrawingMessageWidget(
+                                        key: ValueKey(
+                                          'positioned_drawing_${message.messageId}',
+                                        ),
+                                        message: message,
+                                        viewportWidth: constraints.maxWidth,
+                                        viewportHeight: viewportHeight,
+                                        isDebugging: _isDebugging,
+                                      );
 
                               // Make drawings/GIFs draggable, rotatable, and scalable if sent by current user
                               if (isMe && !_isDrawingMode) {
-                                final isTransforming = _transformingMessageId == message.messageId;
-                                final visualOffset = isTransforming ? _dragOffset : Offset.zero;
-                                final visualRotation = isTransforming ? _currentRotation : (message.rotation ?? 0.0);
-                                final visualScale = isTransforming ? _currentScale : (message.scale ?? 1.0);
+                                final isTransforming =
+                                    _transformingMessageId == message.messageId;
+                                final visualOffset =
+                                    isTransforming ? _dragOffset : Offset.zero;
+                                final visualRotation =
+                                    isTransforming
+                                        ? _currentRotation
+                                        : (message.rotation ?? 0.0);
+                                final visualScale =
+                                    isTransforming
+                                        ? _currentScale
+                                        : (message.scale ?? 1.0);
 
                                 childWidget = FractionalTranslation(
                                   translation: const Offset(-0.5, -0.5),
@@ -1688,11 +1999,14 @@ class _ChatScreenState extends State<ChatScreen> {
                                             child: Transform.scale(
                                               scale: message.scale ?? 1.0,
                                               child: Container(
-                                                constraints: const BoxConstraints(
-                                                  minWidth: 120,
-                                                  minHeight: 120,
+                                                constraints:
+                                                    const BoxConstraints(
+                                                      minWidth: 120,
+                                                      minHeight: 120,
+                                                    ),
+                                                child: Center(
+                                                  child: mediaWidget,
                                                 ),
-                                                child: Center(child: mediaWidget),
                                               ),
                                             ),
                                           ),
@@ -1709,61 +2023,125 @@ class _ChatScreenState extends State<ChatScreen> {
                                               onPointerDown: (details) {
                                                 HapticFeedback.selectionClick();
                                                 setState(() {
-                                                  _activePointers[details.pointer] = details.position;
+                                                  _activePointers[details
+                                                          .pointer] =
+                                                      details.position;
 
-                                                  if (_activePointers.length == 1) {
+                                                  if (_activePointers.length ==
+                                                      1) {
                                                     // First finger - start transform
-                                                    _firstPointerId = details.pointer;
-                                                    _transformingMessageId = message.messageId;
-                                                    _dragStartPosition = details.position;
+                                                    _firstPointerId =
+                                                        details.pointer;
+                                                    _transformingMessageId =
+                                                        message.messageId;
+                                                    _dragStartPosition =
+                                                        details.position;
                                                     _dragOffset = Offset.zero;
-                                                    _baseRotation = mirroredRotation;
-                                                    _baseScale = message.scale ?? 1.0;
-                                                    _currentRotation = _baseRotation;
+                                                    _baseRotation =
+                                                        mirroredRotation;
+                                                    _baseScale =
+                                                        message.scale ?? 1.0;
+                                                    _currentRotation =
+                                                        _baseRotation;
                                                     _currentScale = _baseScale;
-                                                  } else if (_activePointers.length == 2) {
+                                                  } else if (_activePointers
+                                                          .length ==
+                                                      2) {
                                                     // Second finger added - initialize rotation/scale
-                                                    final pointers = _activePointers.values.toList();
-                                                    _initialDistance = _calculateDistance(pointers[0], pointers[1]);
-                                                    _initialAngle = _calculateAngle(pointers[0], pointers[1]);
+                                                    final pointers =
+                                                        _activePointers.values
+                                                            .toList();
+                                                    _initialDistance =
+                                                        _calculateDistance(
+                                                          pointers[0],
+                                                          pointers[1],
+                                                        );
+                                                    _initialAngle =
+                                                        _calculateAngle(
+                                                          pointers[0],
+                                                          pointers[1],
+                                                        );
                                                   }
                                                 });
                                               },
                                               onPointerMove: (details) {
-                                                if (_transformingMessageId == message.messageId) {
+                                                if (_transformingMessageId ==
+                                                    message.messageId) {
                                                   setState(() {
-                                                    _activePointers[details.pointer] = details.position;
+                                                    _activePointers[details
+                                                            .pointer] =
+                                                        details.position;
 
-                                                    if (_activePointers.length == 1) {
+                                                    if (_activePointers
+                                                            .length ==
+                                                        1) {
                                                       // Single finger - drag
-                                                      final pointer = _activePointers.values.first;
-                                                      _dragOffset = pointer - _dragStartPosition;
-                                                    } else if (_activePointers.length >= 2) {
+                                                      final pointer =
+                                                          _activePointers
+                                                              .values
+                                                              .first;
+                                                      _dragOffset =
+                                                          pointer -
+                                                          _dragStartPosition;
+                                                    } else if (_activePointers
+                                                            .length >=
+                                                        2) {
                                                       // Two fingers - drag with first finger, rotate and scale with both
-                                                      final pointers = _activePointers.values.toList();
-                                                      final currentDistance = _calculateDistance(pointers[0], pointers[1]);
-                                                      final currentAngle = _calculateAngle(pointers[0], pointers[1]);
+                                                      final pointers =
+                                                          _activePointers.values
+                                                              .toList();
+                                                      final currentDistance =
+                                                          _calculateDistance(
+                                                            pointers[0],
+                                                            pointers[1],
+                                                          );
+                                                      final currentAngle =
+                                                          _calculateAngle(
+                                                            pointers[0],
+                                                            pointers[1],
+                                                          );
 
                                                       // Keep message anchored to first finger (don't jump to center)
-                                                      if (_firstPointerId != null && _activePointers.containsKey(_firstPointerId)) {
-                                                        final firstFingerPos = _activePointers[_firstPointerId]!;
-                                                        _dragOffset = firstFingerPos - _dragStartPosition;
+                                                      if (_firstPointerId !=
+                                                              null &&
+                                                          _activePointers
+                                                              .containsKey(
+                                                                _firstPointerId,
+                                                              )) {
+                                                        final firstFingerPos =
+                                                            _activePointers[_firstPointerId]!;
+                                                        _dragOffset =
+                                                            firstFingerPos -
+                                                            _dragStartPosition;
                                                       }
 
                                                       // Calculate scale and rotation
-                                                      final scaleDelta = currentDistance / _initialDistance;
-                                                      _currentScale = (_baseScale * scaleDelta).clamp(0.3, 3.0);
-                                                      _currentRotation = _baseRotation + (currentAngle - _initialAngle);
+                                                      final scaleDelta =
+                                                          currentDistance /
+                                                          _initialDistance;
+                                                      _currentScale =
+                                                          (_baseScale *
+                                                                  scaleDelta)
+                                                              .clamp(0.3, 3.0);
+                                                      _currentRotation =
+                                                          _baseRotation +
+                                                          (currentAngle -
+                                                              _initialAngle);
                                                     }
                                                   });
                                                 }
                                               },
                                               onPointerUp: (details) {
-                                                if (_transformingMessageId != message.messageId) return;
+                                                if (_transformingMessageId !=
+                                                    message.messageId)
+                                                  return;
 
                                                 // Will be last pointer after global listener removes it
-                                                final willBeLastPointer = _activePointers.length == 1;
-                                                final isFirstPointer = details.pointer == _firstPointerId;
+                                                final willBeLastPointer =
+                                                    _activePointers.length == 1;
+                                                final isFirstPointer =
+                                                    details.pointer ==
+                                                    _firstPointerId;
 
                                                 // Handle state transitions BEFORE global listener removes pointer
                                                 if (willBeLastPointer) {
@@ -1771,8 +2149,10 @@ class _ChatScreenState extends State<ChatScreen> {
                                                   setState(() {
                                                     HapticFeedback.mediumImpact();
 
-                                                    final newLeft = left + _dragOffset.dx;
-                                                    final newTop = top + _dragOffset.dy;
+                                                    final newLeft =
+                                                        left + _dragOffset.dx;
+                                                    final newTop =
+                                                        top + _dragOffset.dy;
                                                     final contentY = newTop;
 
                                                     _updateMessageTransform(
@@ -1787,15 +2167,27 @@ class _ChatScreenState extends State<ChatScreen> {
 
                                                     // Don't clear state yet - let global listener do it
                                                   });
-                                                } else if (_activePointers.length == 2) {
+                                                } else if (_activePointers
+                                                        .length ==
+                                                    2) {
                                                   // Going from 2 fingers to 1 finger - save current state
                                                   setState(() {
-                                                    final remainingId = _activePointers.keys.firstWhere((id) => id != details.pointer);
-                                                    final remainingPos = _activePointers[remainingId]!;
+                                                    final remainingId =
+                                                        _activePointers.keys
+                                                            .firstWhere(
+                                                              (id) =>
+                                                                  id !=
+                                                                  details
+                                                                      .pointer,
+                                                            );
+                                                    final remainingPos =
+                                                        _activePointers[remainingId]!;
 
                                                     // Save the current transform
-                                                    final newLeft = left + _dragOffset.dx;
-                                                    final newTop = top + _dragOffset.dy;
+                                                    final newLeft =
+                                                        left + _dragOffset.dx;
+                                                    final newTop =
+                                                        top + _dragOffset.dy;
                                                     final contentY = newTop;
 
                                                     _updateMessageTransform(
@@ -1810,15 +2202,18 @@ class _ChatScreenState extends State<ChatScreen> {
 
                                                     // If first finger was lifted, make remaining finger the new anchor
                                                     if (isFirstPointer) {
-                                                      _firstPointerId = remainingId;
+                                                      _firstPointerId =
+                                                          remainingId;
                                                     }
 
                                                     // Reset drag offset since we just saved the position
-                                                    _dragStartPosition = remainingPos;
+                                                    _dragStartPosition =
+                                                        remainingPos;
                                                     _dragOffset = Offset.zero;
 
                                                     // Lock in current rotation/scale as the new base
-                                                    _baseRotation = _currentRotation;
+                                                    _baseRotation =
+                                                        _currentRotation;
                                                     _baseScale = _currentScale;
 
                                                     // Reset two-finger gesture state
@@ -1830,9 +2225,12 @@ class _ChatScreenState extends State<ChatScreen> {
                                               },
                                               onPointerCancel: (details) {
                                                 setState(() {
-                                                  _activePointers.remove(details.pointer);
+                                                  _activePointers.remove(
+                                                    details.pointer,
+                                                  );
                                                   if (_activePointers.isEmpty) {
-                                                    _transformingMessageId = null;
+                                                    _transformingMessageId =
+                                                        null;
                                                     _firstPointerId = null;
                                                     _dragOffset = Offset.zero;
                                                     _currentRotation = 0.0;
@@ -1842,11 +2240,14 @@ class _ChatScreenState extends State<ChatScreen> {
                                               },
                                               // Wrap in container with minimum size for easier gestures
                                               child: Container(
-                                                constraints: const BoxConstraints(
-                                                  minWidth: 120,
-                                                  minHeight: 120,
+                                                constraints:
+                                                    const BoxConstraints(
+                                                      minWidth: 120,
+                                                      minHeight: 120,
+                                                    ),
+                                                child: Center(
+                                                  child: mediaWidget,
                                                 ),
-                                                child: Center(child: mediaWidget),
                                               ),
                                             ),
                                           ),
@@ -1864,13 +2265,23 @@ class _ChatScreenState extends State<ChatScreen> {
                                     child: Transform.rotate(
                                       angle: mirroredRotation,
                                       child: TweenAnimationBuilder<double>(
-                                        tween: Tween(begin: message.scale ?? 1.0, end: message.scale ?? 1.0),
-                                        duration: skipAnimation ? Duration.zero : const Duration(milliseconds: 200),
-                                        curve: Curves.easeOutCubic,
-                                        builder: (context, scale, child) => Transform.scale(
-                                          scale: scale,
-                                          child: child,
+                                        tween: Tween(
+                                          begin: message.scale ?? 1.0,
+                                          end: message.scale ?? 1.0,
                                         ),
+                                        duration:
+                                            skipAnimation
+                                                ? Duration.zero
+                                                : const Duration(
+                                                  milliseconds: 200,
+                                                ),
+                                        curve: Curves.easeOutCubic,
+                                        builder:
+                                            (context, scale, child) =>
+                                                Transform.scale(
+                                                  scale: scale,
+                                                  child: child,
+                                                ),
                                         child: mediaWidget,
                                       ),
                                     ),
@@ -1887,21 +2298,34 @@ class _ChatScreenState extends State<ChatScreen> {
                                   child: Transform.rotate(
                                     angle: mirroredRotation,
                                     child: TweenAnimationBuilder<double>(
-                                      tween: Tween(begin: message.scale ?? 1.0, end: message.scale ?? 1.0),
-                                      duration: skipAnimation ? Duration.zero : const Duration(milliseconds: 200),
-                                      curve: Curves.easeOutCubic,
-                                      builder: (context, scale, child) => Transform.scale(
-                                        scale: scale,
-                                        child: child,
+                                      tween: Tween(
+                                        begin: message.scale ?? 1.0,
+                                        end: message.scale ?? 1.0,
                                       ),
+                                      duration:
+                                          skipAnimation
+                                              ? Duration.zero
+                                              : const Duration(
+                                                milliseconds: 200,
+                                              ),
+                                      curve: Curves.easeOutCubic,
+                                      builder:
+                                          (context, scale, child) =>
+                                              Transform.scale(
+                                                scale: scale,
+                                                child: child,
+                                              ),
                                       child: _MessageBubbleWithGradient(
-                                        key: ValueKey('positioned_${message.messageId}'),
+                                        key: ValueKey(
+                                          'positioned_${message.messageId}',
+                                        ),
                                         message: message,
                                         isMe: isMe,
                                         isLastMessage: isLastMessage,
                                         isFirstInGroup: true,
                                         isLastInGroup: true,
-                                        showTimestamp: true, // Positioned messages always show timestamp
+                                        showTimestamp:
+                                            true, // Positioned messages always show timestamp
                                         scrollController: _scrollController,
                                       ),
                                     ),
@@ -1915,13 +2339,16 @@ class _ChatScreenState extends State<ChatScreen> {
 
                               // The core bubble widget that will be displayed.
                               final bubbleWidget = _MessageBubbleWithGradient(
-                                key: ValueKey('positioned_${message.messageId}'),
+                                key: ValueKey(
+                                  'positioned_${message.messageId}',
+                                ),
                                 message: message,
                                 isMe: isMe,
                                 isLastMessage: isLastMessage,
                                 isFirstInGroup: true,
                                 isLastInGroup: true,
-                                showTimestamp: true, // Positioned messages always show timestamp
+                                showTimestamp:
+                                    true, // Positioned messages always show timestamp
                                 scrollController: _scrollController,
                               );
 
@@ -1934,9 +2361,16 @@ class _ChatScreenState extends State<ChatScreen> {
                                 );
                               } else {
                                 // For interaction, create a large hitbox with Align, and wrap it in GestureDetector for transform support
-                                final isTransforming = _transformingMessageId == message.messageId;
-                                final visualRotation = isTransforming ? _currentRotation : (message.rotation ?? 0.0);
-                                final visualScale = isTransforming ? _currentScale : (message.scale ?? 1.0);
+                                final isTransforming =
+                                    _transformingMessageId == message.messageId;
+                                final visualRotation =
+                                    isTransforming
+                                        ? _currentRotation
+                                        : (message.rotation ?? 0.0);
+                                final visualScale =
+                                    isTransforming
+                                        ? _currentScale
+                                        : (message.scale ?? 1.0);
 
                                 final interactiveHitbox = Stack(
                                   clipBehavior: Clip.none,
@@ -1954,74 +2388,129 @@ class _ChatScreenState extends State<ChatScreen> {
                                                 minWidth: 120,
                                                 minHeight: 120,
                                               ),
-                                              child: Center(child: bubbleWidget),
+                                              child: Center(
+                                                child: bubbleWidget,
+                                              ),
                                             ),
                                           ),
                                         ),
                                       ),
                                     // Actual draggable message
                                     Transform.translate(
-                                      offset: isTransforming ? _dragOffset : Offset.zero,
+                                      offset:
+                                          isTransforming
+                                              ? _dragOffset
+                                              : Offset.zero,
                                       child: Listener(
                                         behavior: HitTestBehavior.opaque,
                                         onPointerDown: (details) {
                                           HapticFeedback.selectionClick();
                                           setState(() {
-                                            _activePointers[details.pointer] = details.position;
+                                            _activePointers[details.pointer] =
+                                                details.position;
 
                                             if (_activePointers.length == 1) {
                                               // First finger - start transform
                                               _firstPointerId = details.pointer;
-                                              _transformingMessageId = message.messageId;
-                                              _dragStartPosition = details.position;
+                                              _transformingMessageId =
+                                                  message.messageId;
+                                              _dragStartPosition =
+                                                  details.position;
                                               _dragOffset = Offset.zero;
                                               _baseRotation = mirroredRotation;
                                               _baseScale = message.scale ?? 1.0;
                                               _currentRotation = _baseRotation;
                                               _currentScale = _baseScale;
-                                            } else if (_activePointers.length == 2) {
+                                            } else if (_activePointers.length ==
+                                                2) {
                                               // Second finger added - initialize rotation/scale
-                                              final pointers = _activePointers.values.toList();
-                                              _initialDistance = _calculateDistance(pointers[0], pointers[1]);
-                                              _initialAngle = _calculateAngle(pointers[0], pointers[1]);
+                                              final pointers =
+                                                  _activePointers.values
+                                                      .toList();
+                                              _initialDistance =
+                                                  _calculateDistance(
+                                                    pointers[0],
+                                                    pointers[1],
+                                                  );
+                                              _initialAngle = _calculateAngle(
+                                                pointers[0],
+                                                pointers[1],
+                                              );
                                             }
                                           });
                                         },
                                         onPointerMove: (details) {
-                                          if (_transformingMessageId == message.messageId) {
+                                          if (_transformingMessageId ==
+                                              message.messageId) {
                                             setState(() {
-                                              _activePointers[details.pointer] = details.position;
+                                              _activePointers[details.pointer] =
+                                                  details.position;
 
                                               if (_activePointers.length == 1) {
                                                 // Single finger - drag
-                                                final pointer = _activePointers.values.first;
-                                                _dragOffset = pointer - _dragStartPosition;
-                                              } else if (_activePointers.length >= 2) {
+                                                final pointer =
+                                                    _activePointers
+                                                        .values
+                                                        .first;
+                                                _dragOffset =
+                                                    pointer -
+                                                    _dragStartPosition;
+                                              } else if (_activePointers
+                                                      .length >=
+                                                  2) {
                                                 // Two fingers - drag with first finger, rotate and scale with both
-                                                final pointers = _activePointers.values.toList();
-                                                final currentDistance = _calculateDistance(pointers[0], pointers[1]);
-                                                final currentAngle = _calculateAngle(pointers[0], pointers[1]);
+                                                final pointers =
+                                                    _activePointers.values
+                                                        .toList();
+                                                final currentDistance =
+                                                    _calculateDistance(
+                                                      pointers[0],
+                                                      pointers[1],
+                                                    );
+                                                final currentAngle =
+                                                    _calculateAngle(
+                                                      pointers[0],
+                                                      pointers[1],
+                                                    );
 
                                                 // Keep message anchored to first finger (don't jump to center)
-                                                if (_firstPointerId != null && _activePointers.containsKey(_firstPointerId)) {
-                                                  final firstFingerPos = _activePointers[_firstPointerId]!;
-                                                  _dragOffset = firstFingerPos - _dragStartPosition;
+                                                if (_firstPointerId != null &&
+                                                    _activePointers.containsKey(
+                                                      _firstPointerId,
+                                                    )) {
+                                                  final firstFingerPos =
+                                                      _activePointers[_firstPointerId]!;
+                                                  _dragOffset =
+                                                      firstFingerPos -
+                                                      _dragStartPosition;
                                                 }
 
                                                 // Calculate scale and rotation
-                                                final scaleDelta = currentDistance / _initialDistance;
-                                                _currentScale = (_baseScale * scaleDelta).clamp(0.3, 3.0);
-                                                _currentRotation = _baseRotation + (currentAngle - _initialAngle);
+                                                final scaleDelta =
+                                                    currentDistance /
+                                                    _initialDistance;
+                                                _currentScale = (_baseScale *
+                                                        scaleDelta)
+                                                    .clamp(0.3, 3.0);
+                                                _currentRotation =
+                                                    _baseRotation +
+                                                    (currentAngle -
+                                                        _initialAngle);
                                               }
                                             });
                                           }
                                         },
                                         onPointerUp: (details) {
-                                          if (_transformingMessageId != message.messageId) return;
+                                          if (_transformingMessageId !=
+                                              message.messageId)
+                                            return;
 
                                           // Will be last pointer after global listener removes it
-                                          final willBeLastPointer = _activePointers.length == 1;
-                                          final isFirstPointer = details.pointer == _firstPointerId;
+                                          final willBeLastPointer =
+                                              _activePointers.length == 1;
+                                          final isFirstPointer =
+                                              details.pointer ==
+                                              _firstPointerId;
 
                                           // Handle state transitions BEFORE global listener removes pointer
                                           if (willBeLastPointer) {
@@ -2029,10 +2518,16 @@ class _ChatScreenState extends State<ChatScreen> {
                                             setState(() {
                                               HapticFeedback.mediumImpact();
 
-                                              final newLeft = left + _dragOffset.dx;
-                                              final newTop = top + _dragOffset.dy;
-                                              final scrollOffset = _scrollController.hasClients ? _scrollController.offset : 0.0;
-                                              final contentY = newTop + scrollOffset;
+                                              final newLeft =
+                                                  left + _dragOffset.dx;
+                                              final newTop =
+                                                  top + _dragOffset.dy;
+                                              final scrollOffset =
+                                                  _scrollController.hasClients
+                                                      ? _scrollController.offset
+                                                      : 0.0;
+                                              final contentY =
+                                                  newTop + scrollOffset;
 
                                               _updateMessageTransform(
                                                 message,
@@ -2046,17 +2541,31 @@ class _ChatScreenState extends State<ChatScreen> {
 
                                               // Don't clear state yet - let global listener do it
                                             });
-                                          } else if (_activePointers.length == 2) {
+                                          } else if (_activePointers.length ==
+                                              2) {
                                             // Going from 2 fingers to 1 finger - save current state
                                             setState(() {
-                                              final remainingId = _activePointers.keys.firstWhere((id) => id != details.pointer);
-                                              final remainingPos = _activePointers[remainingId]!;
+                                              final remainingId =
+                                                  _activePointers.keys
+                                                      .firstWhere(
+                                                        (id) =>
+                                                            id !=
+                                                            details.pointer,
+                                                      );
+                                              final remainingPos =
+                                                  _activePointers[remainingId]!;
 
                                               // Save the current transform
-                                              final newLeft = left + _dragOffset.dx;
-                                              final newTop = top + _dragOffset.dy;
-                                              final scrollOffset = _scrollController.hasClients ? _scrollController.offset : 0.0;
-                                              final contentY = newTop + scrollOffset;
+                                              final newLeft =
+                                                  left + _dragOffset.dx;
+                                              final newTop =
+                                                  top + _dragOffset.dy;
+                                              final scrollOffset =
+                                                  _scrollController.hasClients
+                                                      ? _scrollController.offset
+                                                      : 0.0;
+                                              final contentY =
+                                                  newTop + scrollOffset;
 
                                               _updateMessageTransform(
                                                 message,
@@ -2090,7 +2599,9 @@ class _ChatScreenState extends State<ChatScreen> {
                                         },
                                         onPointerCancel: (details) {
                                           setState(() {
-                                            _activePointers.remove(details.pointer);
+                                            _activePointers.remove(
+                                              details.pointer,
+                                            );
                                             if (_activePointers.isEmpty) {
                                               _transformingMessageId = null;
                                               _firstPointerId = null;
@@ -2111,18 +2622,33 @@ class _ChatScreenState extends State<ChatScreen> {
                                                 return Align(
                                                   alignment: Alignment.center,
                                                   child: Container(
-                                                    constraints: const BoxConstraints(
-                                                      minWidth: 120,
-                                                      minHeight: 120,
+                                                    constraints:
+                                                        const BoxConstraints(
+                                                          minWidth: 120,
+                                                          minHeight: 120,
+                                                        ),
+                                                    decoration:
+                                                        _isDebugging
+                                                            ? BoxDecoration(
+                                                              border: Border.all(
+                                                                color: Colors
+                                                                    .yellow
+                                                                    .withValues(
+                                                                      alpha:
+                                                                          0.8,
+                                                                    ),
+                                                                width: 2,
+                                                              ),
+                                                              color: Colors
+                                                                  .yellow
+                                                                  .withValues(
+                                                                    alpha: 0.15,
+                                                                  ),
+                                                            )
+                                                            : null,
+                                                    child: Center(
+                                                      child: bubbleWidget,
                                                     ),
-                                                    decoration: _isDebugging ? BoxDecoration(
-                                                      border: Border.all(
-                                                        color: Colors.yellow.withValues(alpha: 0.8),
-                                                        width: 2,
-                                                      ),
-                                                      color: Colors.yellow.withValues(alpha: 0.15),
-                                                    ) : null,
-                                                    child: Center(child: bubbleWidget),
                                                   ),
                                                 );
                                               },
@@ -2144,19 +2670,23 @@ class _ChatScreenState extends State<ChatScreen> {
 
                             return skipAnimation
                                 ? Positioned(
-                                    key: ValueKey('positioned_${message.messageId}'),
-                                    left: left,
-                                    top: top,
-                                    child: childWidget,
-                                  )
+                                  key: ValueKey(
+                                    'positioned_${message.messageId}',
+                                  ),
+                                  left: left,
+                                  top: top,
+                                  child: childWidget,
+                                )
                                 : AnimatedPositioned(
-                                    key: ValueKey('animated_positioned_${message.messageId}'),
-                                    left: left,
-                                    top: top,
-                                    duration: const Duration(milliseconds: 200),
-                                    curve: Curves.easeOutCubic,
-                                    child: childWidget,
-                                  );
+                                  key: ValueKey(
+                                    'animated_positioned_${message.messageId}',
+                                  ),
+                                  left: left,
+                                  top: top,
+                                  duration: const Duration(milliseconds: 200),
+                                  curve: Curves.easeOutCubic,
+                                  child: childWidget,
+                                );
                           }),
                         ],
                       ),
@@ -2181,69 +2711,78 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
                   decoration: BoxDecoration(
-                    color: _isDrawingMode
-                        ? Colors.black.withValues(alpha: 0.8)
-                        : Colors.black,
+                    color:
+                        _isDrawingMode
+                            ? Colors.black.withValues(alpha: 0.8)
+                            : Colors.black,
                   ),
                   child: Padding(
-                    padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 10),
+                    padding: EdgeInsets.only(
+                      bottom: MediaQuery.of(context).viewInsets.bottom + 10,
+                    ),
                     child: SafeArea(
-                    top: false,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: AnimatedCrossFade(
-                              firstChild: _buildTextInput(),
-                              secondChild: _buildDrawingControls(),
-                              crossFadeState: _isDrawingMode
-                                  ? CrossFadeState.showSecond
-                                  : CrossFadeState.showFirst,
-                              duration: const Duration(milliseconds: 250),
-                              firstCurve: Curves.easeInOut,
-                              secondCurve: Curves.easeInOut,
-                              sizeCurve: Curves.easeInOut,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          // Single send button for both modes - stays at same X position
-                          Container(
-                            width: 36,
-                            height: 36,
-                            decoration: const BoxDecoration(
-                              color: Color(0xFF5856D6),
-                              shape: BoxShape.circle,
-                            ),
-                            child: IconButton(
-                              padding: EdgeInsets.only(top: 3),
-                              icon: SvgPicture.asset(
-                                'assets/send.svg',
-                                width: 15,
-                                height: 15,
-                                colorFilter: const ColorFilter.mode(
-                                  Colors.white,
-                                  BlendMode.srcIn,
-                                ),
+                      top: false,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 8,
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: AnimatedCrossFade(
+                                firstChild: _buildTextInput(),
+                                secondChild: _buildDrawingControls(),
+                                crossFadeState:
+                                    _isDrawingMode
+                                        ? CrossFadeState.showSecond
+                                        : CrossFadeState.showFirst,
+                                duration: const Duration(milliseconds: 250),
+                                firstCurve: Curves.easeInOut,
+                                secondCurve: Curves.easeInOut,
+                                sizeCurve: Curves.easeInOut,
                               ),
-                              onPressed: () {
-                                if (_isDrawingMode) {
-                                  if (_drawingStrokes.isNotEmpty) {
-                                    _sendDrawing();
-                                  }
-                                } else {
-                                  if (_messageController.text.trim().isNotEmpty) {
-                                    _sendMessage();
-                                  }
-                                }
-                              },
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 8),
+                            // Single send button for both modes - stays at same X position
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF5856D6),
+                                shape: BoxShape.circle,
+                              ),
+                              child: IconButton(
+                                padding: EdgeInsets.only(top: 3),
+                                icon: SvgPicture.asset(
+                                  'assets/send.svg',
+                                  width: 15,
+                                  height: 15,
+                                  colorFilter: const ColorFilter.mode(
+                                    Colors.white,
+                                    BlendMode.srcIn,
+                                  ),
+                                ),
+                                onPressed: () {
+                                  if (_isDrawingMode) {
+                                    if (_drawingStrokes.isNotEmpty) {
+                                      _sendDrawing();
+                                    }
+                                  } else {
+                                    if (_messageController.text
+                                        .trim()
+                                        .isNotEmpty) {
+                                      _sendMessage();
+                                    }
+                                  }
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
-                ),
                 ),
               ),
             ),
@@ -2257,19 +2796,26 @@ class _ChatScreenState extends State<ChatScreen> {
             child: SafeArea(
               bottom: false,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
                 child: Center(
                   child: AnimatedSlide(
                     duration: const Duration(milliseconds: 300),
                     curve: Curves.easeOutCubic,
-                    offset: _isDrawingMode ? Offset.zero : const Offset(0, -1.5),
+                    offset:
+                        _isDrawingMode ? Offset.zero : const Offset(0, -1.5),
                     child: AnimatedOpacity(
                       duration: const Duration(milliseconds: 300),
                       opacity: _isDrawingMode ? 1.0 : 0.0,
                       child: IgnorePointer(
                         ignoring: !_isDrawingMode,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.black.withValues(alpha: 0.95),
                             borderRadius: BorderRadius.circular(25),
@@ -2322,7 +2868,7 @@ class _ChatScreenState extends State<ChatScreen> {
         hintText: 'Message...',
         hintStyle: AppTypography.body.copyWith(
           color: AppColors.textTertiary.withValues(alpha: 0.7),
-          fontWeight: FontWeight.w600
+          fontWeight: FontWeight.w600,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(100),
@@ -2367,53 +2913,58 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         suffixIcon: PullDownButton(
           position: PullDownMenuPosition.automatic,
-          itemBuilder: (context) => [
-            PullDownMenuItem(
-              onTap: () {
-                FocusScope.of(context).unfocus();
-                setState(() {
-                  _isDrawingMode = true;
-                });
-              },
-              title: 'Draw',
-              icon: CupertinoIcons.paintbrush,
-            ),
-            PullDownMenuItem(
-              onTap: () {
-                FocusScope.of(context).unfocus();
-                _showGifPicker();
-              },
-              title: 'Gifs',
-              icon: CupertinoIcons.square_grid_3x2,
-            ),
-            PullDownMenuItem(
-              onTap: () {
-                FocusScope.of(context).unfocus();
-                _showStickerPicker();
-              },
-              title: 'Stickers',
-              icon: CupertinoIcons.smiley,
-            ),
-            PullDownMenuItem( // Using PullDownMenuItem for now, will make custom if needed
-              onTap: () {
-                FocusScope.of(context).unfocus();
-                _showClipPicker();
-              },
-              title: 'Clips',
-              icon: CupertinoIcons.play_rectangle_fill, // Using a suitable Cupertino icon for clips
-            ),
-          ],
-          buttonBuilder: (context, showMenu) => IconButton(
-            icon: Icon(
-              CupertinoIcons.add,
-              color: Colors.white.withValues(alpha: 0.5),
-              size: 24,
-            ),
-            onPressed: () {
-              FocusScope.of(context).unfocus();
-              showMenu();
-            },
-          ),
+          itemBuilder:
+              (context) => [
+                PullDownMenuItem(
+                  onTap: () {
+                    FocusScope.of(context).unfocus();
+                    setState(() {
+                      _isDrawingMode = true;
+                    });
+                  },
+                  title: 'Draw',
+                  icon: CupertinoIcons.paintbrush,
+                ),
+                PullDownMenuItem(
+                  onTap: () {
+                    FocusScope.of(context).unfocus();
+                    _showGifPicker();
+                  },
+                  title: 'Gifs',
+                  icon: CupertinoIcons.square_grid_3x2,
+                ),
+                PullDownMenuItem(
+                  onTap: () {
+                    FocusScope.of(context).unfocus();
+                    _showStickerPicker();
+                  },
+                  title: 'Stickers',
+                  icon: CupertinoIcons.smiley,
+                ),
+                PullDownMenuItem(
+                  // Using PullDownMenuItem for now, will make custom if needed
+                  onTap: () {
+                    FocusScope.of(context).unfocus();
+                    _showClipPicker();
+                  },
+                  title: 'Clips',
+                  icon:
+                      CupertinoIcons
+                          .play_rectangle_fill, // Using a suitable Cupertino icon for clips
+                ),
+              ],
+          buttonBuilder:
+              (context, showMenu) => IconButton(
+                icon: Icon(
+                  CupertinoIcons.add,
+                  color: Colors.white.withValues(alpha: 0.5),
+                  size: 24,
+                ),
+                onPressed: () {
+                  FocusScope.of(context).unfocus();
+                  showMenu();
+                },
+              ),
         ),
       ),
       maxLines: null,
@@ -2508,13 +3059,16 @@ class _ChatScreenState extends State<ChatScreen> {
                 color: _drawingStrokes.isEmpty ? Colors.white38 : Colors.white,
                 size: 20,
               ),
-              onPressed: _drawingStrokes.isEmpty ? null : () {
-                setState(() {
-                  if (_drawingStrokes.isNotEmpty) {
-                    _drawingStrokes.removeLast();
-                  }
-                });
-              },
+              onPressed:
+                  _drawingStrokes.isEmpty
+                      ? null
+                      : () {
+                        setState(() {
+                          if (_drawingStrokes.isNotEmpty) {
+                            _drawingStrokes.removeLast();
+                          }
+                        });
+                      },
             ),
           ),
           const SizedBox(width: 12),
@@ -2543,7 +3097,10 @@ class _ChatScreenState extends State<ChatScreen> {
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
                       decoration: BoxDecoration(
                         color: const Color(0xFF2C2C2E).withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(100),
@@ -2574,29 +3131,32 @@ class _ChatScreenState extends State<ChatScreen> {
                     itemBuilder: (context, pageIndex) {
                       return Row(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: _colorPages[pageIndex].map((color) {
-                          final isSelected = color == _selectedColor;
-                          return GestureDetector(
-                            onTap: () {
-                              setState(() {
-                                _selectedColor = color;
-                              });
-                            },
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 2),
-                              width: 22,
-                              height: 22,
-                              decoration: BoxDecoration(
-                                color: color,
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: isSelected ? 3 : 1.5,
+                        children:
+                            _colorPages[pageIndex].map((color) {
+                              final isSelected = color == _selectedColor;
+                              return GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _selectedColor = color;
+                                  });
+                                },
+                                child: Container(
+                                  margin: const EdgeInsets.symmetric(
+                                    horizontal: 2,
+                                  ),
+                                  width: 22,
+                                  height: 22,
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: isSelected ? 3 : 1.5,
+                                    ),
+                                  ),
                                 ),
-                              ),
-                            ),
-                          );
-                        }).toList(),
+                              );
+                            }).toList(),
                       );
                     },
                   ),
@@ -2611,9 +3171,10 @@ class _ChatScreenState extends State<ChatScreen> {
                       width: _currentColorPage == index ? 20 : 6,
                       height: 6,
                       decoration: BoxDecoration(
-                        color: _currentColorPage == index
-                            ? Colors.white
-                            : Colors.white.withValues(alpha: 0.3),
+                        color:
+                            _currentColorPage == index
+                                ? Colors.white
+                                : Colors.white.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(3),
                       ),
                     );
@@ -2662,10 +3223,12 @@ class _MessageBubbleWithGradient extends StatefulWidget {
   });
 
   @override
-  State<_MessageBubbleWithGradient> createState() => _MessageBubbleWithGradientState();
+  State<_MessageBubbleWithGradient> createState() =>
+      _MessageBubbleWithGradientState();
 }
 
-class _MessageBubbleWithGradientState extends State<_MessageBubbleWithGradient> {
+class _MessageBubbleWithGradientState
+    extends State<_MessageBubbleWithGradient> {
   final GlobalKey _key = GlobalKey();
   Color _bubbleColorTop = AppColors.surfaceVariant;
   Color _bubbleColorBottom = AppColors.surfaceVariant;
@@ -2693,7 +3256,10 @@ class _MessageBubbleWithGradientState extends State<_MessageBubbleWithGradient> 
         final renderBox = _key.currentContext?.findRenderObject() as RenderBox?;
         if (renderBox == null) return;
 
-        final scrollBox = widget.scrollController.position.context.storageContext.findRenderObject() as RenderBox?;
+        final scrollBox =
+            widget.scrollController.position.context.storageContext
+                    .findRenderObject()
+                as RenderBox?;
         if (scrollBox == null) return;
 
         final bubblePosition = renderBox.localToGlobal(Offset.zero);
@@ -2705,16 +3271,18 @@ class _MessageBubbleWithGradientState extends State<_MessageBubbleWithGradient> 
 
         setState(() {
           if (widget.isMe) {
-            _bubbleColorTop = Color.lerp(
-              const Color(0xFF5856D6),
-              const Color(0xFF7B68EE),
-              progress,
-            )!;
-            _bubbleColorBottom = Color.lerp(
-              const Color(0xFF4834D4),
-              const Color(0xFF5856D6),
-              progress,
-            )!;
+            _bubbleColorTop =
+                Color.lerp(
+                  const Color(0xFF5856D6),
+                  const Color(0xFF7B68EE),
+                  progress,
+                )!;
+            _bubbleColorBottom =
+                Color.lerp(
+                  const Color(0xFF4834D4),
+                  const Color(0xFF5856D6),
+                  progress,
+                )!;
           } else {
             _bubbleColorTop = AppColors.surfaceVariant;
             _bubbleColorBottom = AppColors.surfaceVariant;
@@ -2773,7 +3341,9 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Special handling for GIF messages - render at message width without bubble
-    if (message.messageType == 'gif' && message.metadata != null && message.metadata!['gifUrl'] != null) {
+    if (message.messageType == 'gif' &&
+        message.metadata != null &&
+        message.metadata!['gifUrl'] != null) {
       return Align(
         alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
@@ -2782,40 +3352,59 @@ class _MessageBubble extends StatelessWidget {
             maxWidth: MediaQuery.of(context).size.width * 0.5,
           ),
           child: Column(
-            crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            crossAxisAlignment:
+                isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(
-                  message.metadata!['gifUrl'],
-                  fit: BoxFit.cover,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return Container(
-                      height: 200,
-                      color: Colors.grey.shade900,
-                      child: const Center(
-                        child: CupertinoActivityIndicator(
-                          color: Colors.white,
-                          radius: 14,
-                        ),
-                      ),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      height: 200,
-                      color: Colors.grey.shade900,
-                      child: const Center(
-                        child: Icon(
-                          Icons.error_outline,
-                          color: Colors.grey,
-                          size: 40,
-                        ),
-                      ),
-                    );
-                  },
+              GestureDetector(
+                onTap: () {
+                  final gifUrl = message.metadata!['gifUrl'];
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      fullscreenDialog: true,
+                      builder:
+                          (context) => FullscreenGifViewer(
+                            gifUrl: gifUrl,
+                            heroTag: message.messageId,
+                          ),
+                    ),
+                  );
+                },
+                child: Hero(
+                  tag: message.messageId,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      message.metadata!['gifUrl'],
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Container(
+                          height: 200,
+                          color: Colors.grey.shade900,
+                          child: const Center(
+                            child: CupertinoActivityIndicator(
+                              color: Colors.white,
+                              radius: 14,
+                            ),
+                          ),
+                        );
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          height: 200,
+                          color: Colors.grey.shade900,
+                          child: const Center(
+                            child: Icon(
+                              Icons.error_outline,
+                              color: Colors.grey,
+                              size: 40,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                 ),
               ),
               // Only show timestamp if this is the last in time cluster
@@ -2837,7 +3426,9 @@ class _MessageBubble extends StatelessWidget {
     }
 
     // Special handling for sticker messages - render without bubble, smaller than GIFs
-    if (message.messageType == 'sticker' && message.metadata != null && message.metadata!['stickerUrl'] != null) {
+    if (message.messageType == 'sticker' &&
+        message.metadata != null &&
+        message.metadata!['stickerUrl'] != null) {
       return Align(
         alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
@@ -2887,7 +3478,8 @@ class _MessageBubble extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 6),
         child: Column(
-          crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          crossAxisAlignment:
+              isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
             // Message bubble
@@ -2903,13 +3495,14 @@ class _MessageBubble extends StatelessWidget {
                   maxWidth: MediaQuery.of(context).size.width * 0.75,
                 ),
                 decoration: BoxDecoration(
-                  gradient: isMe
-                      ? LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [bubbleColorTop, bubbleColorBottom],
-                        )
-                      : null,
+                  gradient:
+                      isMe
+                          ? LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [bubbleColorTop, bubbleColorBottom],
+                          )
+                          : null,
                   color: isMe ? null : bubbleColorTop,
                   borderRadius: _getBorderRadius(),
                 ),
@@ -3059,11 +3652,7 @@ class _MessageBubble extends StatelessWidget {
 }
 
 // Drawing stroke data class (stores normalized coordinates 0.0-1.0)
-enum BrushType {
-  pencil,
-  highlighter,
-  neon,
-}
+enum BrushType { pencil, highlighter, neon }
 
 class DrawingStroke {
   final List<Offset> points; // Normalized coordinates (0.0 to 1.0)
@@ -3101,29 +3690,39 @@ class _DrawingMessageWidget extends StatelessWidget {
     }
 
     final strokesData = metadata['strokes'] as List;
-    final strokes = strokesData.map((strokeJson) {
-      final points = (strokeJson['points'] as List).map((p) {
-        final coords = p as List;
-        // Handle both int and double from JSON
-        return Offset((coords[0] as num).toDouble(), (coords[1] as num).toDouble());
-      }).toList();
+    final strokes =
+        strokesData.map((strokeJson) {
+          final points =
+              (strokeJson['points'] as List).map((p) {
+                final coords = p as List;
+                // Handle both int and double from JSON
+                return Offset(
+                  (coords[0] as num).toDouble(),
+                  (coords[1] as num).toDouble(),
+                );
+              }).toList();
 
-      // Parse color from hex string
-      final colorHex = strokeJson['color'] as String;
-      final colorInt = int.parse(colorHex.substring(1), radix: 16);
-      final color = Color(colorInt);
+          // Parse color from hex string
+          final colorHex = strokeJson['color'] as String;
+          final colorInt = int.parse(colorHex.substring(1), radix: 16);
+          final color = Color(colorInt);
 
-      // Parse brush type (default to pencil for backwards compatibility)
-      final brushTypeName = strokeJson['brushType'] as String?;
-      final brushType = brushTypeName != null
-          ? BrushType.values.firstWhere(
-              (e) => e.name == brushTypeName,
-              orElse: () => BrushType.pencil,
-            )
-          : BrushType.pencil;
+          // Parse brush type (default to pencil for backwards compatibility)
+          final brushTypeName = strokeJson['brushType'] as String?;
+          final brushType =
+              brushTypeName != null
+                  ? BrushType.values.firstWhere(
+                    (e) => e.name == brushTypeName,
+                    orElse: () => BrushType.pencil,
+                  )
+                  : BrushType.pencil;
 
-      return DrawingStroke(points: points, color: color, brushType: brushType);
-    }).toList();
+          return DrawingStroke(
+            points: points,
+            color: color,
+            brushType: brushType,
+          );
+        }).toList();
 
     // Calculate bounds from metadata
     final bounds = metadata['bounds'] as Map<String, dynamic>?;
@@ -3139,9 +3738,10 @@ class _DrawingMessageWidget extends StatelessWidget {
     return Container(
       width: width.clamp(50.0, viewportWidth),
       height: height.clamp(50.0, viewportHeight),
-      decoration: isDebugging ? BoxDecoration(
-        border: Border.all(color: Colors.red, width: 2),
-      ) : null,
+      decoration:
+          isDebugging
+              ? BoxDecoration(border: Border.all(color: Colors.red, width: 2))
+              : null,
       child: CustomPaint(
         painter: _SavedDrawingPainter(
           strokes: strokes,
@@ -3168,7 +3768,11 @@ class _SavedDrawingPainter extends CustomPainter {
     required this.viewportHeight,
   });
 
-  Paint _getPaintForBrush(DrawingStroke stroke, {bool isGlow = false, double glowAlpha = 1.0}) {
+  Paint _getPaintForBrush(
+    DrawingStroke stroke, {
+    bool isGlow = false,
+    double glowAlpha = 1.0,
+  }) {
     switch (stroke.brushType) {
       case BrushType.pencil:
         return Paint()
@@ -3212,7 +3816,12 @@ class _SavedDrawingPainter extends CustomPainter {
     }
   }
 
-  void _drawStroke(Canvas canvas, DrawingStroke stroke, double minX, double minY) {
+  void _drawStroke(
+    Canvas canvas,
+    DrawingStroke stroke,
+    double minX,
+    double minY,
+  ) {
     // Handle single-point strokes (dots)
     if (stroke.points.length == 1) {
       final point = Offset(
@@ -3222,33 +3831,37 @@ class _SavedDrawingPainter extends CustomPainter {
 
       if (stroke.brushType == BrushType.neon) {
         // Draw glow layers for neon dot
-        final glowPaint = Paint()
-          ..color = stroke.color.withValues(alpha: 0.5)
-          ..style = PaintingStyle.fill
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+        final glowPaint =
+            Paint()
+              ..color = stroke.color.withValues(alpha: 0.5)
+              ..style = PaintingStyle.fill
+              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
         canvas.drawCircle(point, 10.0, glowPaint);
 
-        final corePaint = Paint()
-          ..color = stroke.color
-          ..style = PaintingStyle.fill;
+        final corePaint =
+            Paint()
+              ..color = stroke.color
+              ..style = PaintingStyle.fill;
         canvas.drawCircle(point, 2.5, corePaint);
       } else if (stroke.brushType == BrushType.highlighter) {
         // Square dot for highlighter
-        final dotPaint = Paint()
-          ..color = stroke.color.withValues(alpha: 0.5)
-          ..style = PaintingStyle.fill;
-        final rect = Rect.fromCenter(
-          center: point,
-          width: 12.0,
-          height: 12.0,
-        );
+        final dotPaint =
+            Paint()
+              ..color = stroke.color.withValues(alpha: 0.5)
+              ..style = PaintingStyle.fill;
+        final rect = Rect.fromCenter(center: point, width: 12.0, height: 12.0);
         canvas.drawRect(rect, dotPaint);
       } else {
         // Round dot for pencil
-        final dotPaint = Paint()
-          ..color = stroke.color
-          ..style = PaintingStyle.fill;
-        canvas.drawCircle(point, _getDotRadiusForBrush(stroke.brushType), dotPaint);
+        final dotPaint =
+            Paint()
+              ..color = stroke.color
+              ..style = PaintingStyle.fill;
+        canvas.drawCircle(
+          point,
+          _getDotRadiusForBrush(stroke.brushType),
+          dotPaint,
+        );
       }
     } else {
       // Use Path for smoother strokes
@@ -3270,7 +3883,11 @@ class _SavedDrawingPainter extends CustomPainter {
       // Draw neon with glow effect
       if (stroke.brushType == BrushType.neon) {
         // Draw glow layer
-        final glowPaint = _getPaintForBrush(stroke, isGlow: true, glowAlpha: 1.0);
+        final glowPaint = _getPaintForBrush(
+          stroke,
+          isGlow: true,
+          glowAlpha: 1.0,
+        );
         canvas.drawPath(path, glowPaint);
 
         // Draw core bright line
@@ -3362,33 +3979,61 @@ class _GifMessageWidget extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
-        child: Image.network(
-          gifUrl,
-          fit: BoxFit.cover,
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return Container(
-              color: Colors.grey.shade900,
-              child: const Center(
-                child: CupertinoActivityIndicator(
-                  radius: 14.0,
-                  color: Colors.white,
-                ),
+        child: GestureDetector(
+          onTap: () {
+            Navigator.of(context).push(
+              PageRouteBuilder(
+                opaque: false,
+                pageBuilder: (BuildContext context, _, __) {
+                  return FullscreenGifViewer(
+                    gifUrl: gifUrl,
+                    heroTag: message.messageId, // Pass the heroTag
+                  );
+                },
+                // Remove custom transitions, let Hero handle it
+                transitionsBuilder: (
+                  BuildContext context,
+                  Animation<double> animation,
+                  Animation<double> secondaryAnimation,
+                  Widget child,
+                ) {
+                  return child; // Just return child, Hero handles animation
+                },
+                transitionDuration: const Duration(milliseconds: 300),
               ),
             );
           },
-          errorBuilder: (context, error, stackTrace) {
-            return Container(
-              color: Colors.grey.shade900,
-              child: const Center(
-                child: Icon(
-                  Icons.error_outline,
-                  color: Colors.grey,
-                  size: 40,
-                ),
-              ),
-            );
-          },
+          child: Hero(
+            tag: message.messageId, // Unique tag for Hero
+            child: Image.network(
+              gifUrl,
+              fit: BoxFit.cover,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) return child;
+                return Container(
+                  color: Colors.grey.shade900,
+                  child: const Center(
+                    child: CupertinoActivityIndicator(
+                      radius: 14.0,
+                      color: Colors.white,
+                    ),
+                  ),
+                );
+              },
+              errorBuilder: (context, error, stackTrace) {
+                return Container(
+                  color: Colors.grey.shade900,
+                  child: const Center(
+                    child: Icon(
+                      Icons.error_outline,
+                      color: Colors.grey,
+                      size: 40,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
         ),
       ),
     );
@@ -3421,7 +4066,8 @@ class _StickerMessageWidget extends StatelessWidget {
     final stickerHeight = (metadata['height'] as num?)?.toDouble() ?? 200.0;
 
     // Calculate display size - maintain aspect ratio but limit to reasonable size
-    final maxDisplayWidth = viewportWidth * 0.5; // Max 50% of screen width (smaller than GIFs)
+    final maxDisplayWidth =
+        viewportWidth * 0.5; // Max 50% of screen width (smaller than GIFs)
     final maxDisplayHeight = viewportHeight * 0.35; // Max 35% of screen height
 
     double displayWidth = stickerWidth;
@@ -3468,11 +4114,7 @@ class _StickerMessageWidget extends StatelessWidget {
           return Container(
             color: Colors.transparent,
             child: const Center(
-              child: Icon(
-                Icons.error_outline,
-                color: Colors.grey,
-                size: 40,
-              ),
+              child: Icon(Icons.error_outline, color: Colors.grey, size: 40),
             ),
           );
         },
@@ -3549,7 +4191,8 @@ class _ClipMessageWidget extends StatelessWidget {
           alignment: Alignment.center,
           children: [
             Image.network(
-              metadata['previewUrl'] ?? videoUrl, // Use previewUrl if available, else videoUrl
+              metadata['previewUrl'] ??
+                  videoUrl, // Use previewUrl if available, else videoUrl
               fit: BoxFit.cover,
               loadingBuilder: (context, child, loadingProgress) {
                 if (loadingProgress == null) return child;
@@ -3576,7 +4219,8 @@ class _ClipMessageWidget extends StatelessWidget {
                 );
               },
             ),
-            const Icon( // Play icon overlay
+            const Icon(
+              // Play icon overlay
               Icons.play_circle_fill,
               color: Colors.white70,
               size: 50,
@@ -3602,7 +4246,11 @@ class _DrawingOverlayPainter extends CustomPainter {
     required this.viewportHeight,
   });
 
-  Paint _getPaintForBrush(DrawingStroke stroke, {bool isGlow = false, double glowAlpha = 1.0}) {
+  Paint _getPaintForBrush(
+    DrawingStroke stroke, {
+    bool isGlow = false,
+    double glowAlpha = 1.0,
+  }) {
     switch (stroke.brushType) {
       case BrushType.pencil:
         return Paint()
@@ -3656,33 +4304,37 @@ class _DrawingOverlayPainter extends CustomPainter {
 
       if (stroke.brushType == BrushType.neon) {
         // Draw glow layers for neon dot
-        final glowPaint = Paint()
-          ..color = stroke.color.withValues(alpha: 0.5)
-          ..style = PaintingStyle.fill
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+        final glowPaint =
+            Paint()
+              ..color = stroke.color.withValues(alpha: 0.5)
+              ..style = PaintingStyle.fill
+              ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
         canvas.drawCircle(point, 10.0, glowPaint);
 
-        final corePaint = Paint()
-          ..color = stroke.color
-          ..style = PaintingStyle.fill;
+        final corePaint =
+            Paint()
+              ..color = stroke.color
+              ..style = PaintingStyle.fill;
         canvas.drawCircle(point, 2.5, corePaint);
       } else if (stroke.brushType == BrushType.highlighter) {
         // Square dot for highlighter
-        final dotPaint = Paint()
-          ..color = stroke.color.withValues(alpha: 0.5)
-          ..style = PaintingStyle.fill;
-        final rect = Rect.fromCenter(
-          center: point,
-          width: 12.0,
-          height: 12.0,
-        );
+        final dotPaint =
+            Paint()
+              ..color = stroke.color.withValues(alpha: 0.5)
+              ..style = PaintingStyle.fill;
+        final rect = Rect.fromCenter(center: point, width: 12.0, height: 12.0);
         canvas.drawRect(rect, dotPaint);
       } else {
         // Round dot for pencil
-        final dotPaint = Paint()
-          ..color = stroke.color
-          ..style = PaintingStyle.fill;
-        canvas.drawCircle(point, _getDotRadiusForBrush(stroke.brushType), dotPaint);
+        final dotPaint =
+            Paint()
+              ..color = stroke.color
+              ..style = PaintingStyle.fill;
+        canvas.drawCircle(
+          point,
+          _getDotRadiusForBrush(stroke.brushType),
+          dotPaint,
+        );
       }
     } else {
       // Use Path for smoother strokes
@@ -3704,7 +4356,11 @@ class _DrawingOverlayPainter extends CustomPainter {
       // Draw neon with glow effect
       if (stroke.brushType == BrushType.neon) {
         // Draw glow layer
-        final glowPaint = _getPaintForBrush(stroke, isGlow: true, glowAlpha: 1.0);
+        final glowPaint = _getPaintForBrush(
+          stroke,
+          isGlow: true,
+          glowAlpha: 1.0,
+        );
         canvas.drawPath(path, glowPaint);
 
         // Draw core bright line
