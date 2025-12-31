@@ -24,6 +24,7 @@ import 'package:client/services/klipy_service.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:client/widgets/clip_picker_sheet.dart';
 import 'package:client/screens/fullscreen_gif_viewer.dart';
+import 'package:client/widgets/media_picker_modal.dart'; // New import
 
 class ChatScreen extends StatefulWidget {
   final String friendId;
@@ -661,15 +662,7 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void _showGifPicker() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder:
-          (context) => GifPickerSheet(onGifSelected: (gif) => _sendGif(gif)),
-    );
-  }
+
 
   Future<void> _sendGif(TenorGif gif) async {
     try {
@@ -702,17 +695,7 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void _showStickerPicker() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder:
-          (context) => StickerPickerSheet(
-            onStickerSelected: (sticker) => _sendSticker(sticker),
-          ),
-    );
-  }
+
 
   Future<void> _sendSticker(KlipySticker sticker) async {
     try {
@@ -745,16 +728,7 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  void _showClipPicker() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder:
-          (context) =>
-              ClipPickerSheet(onClipSelected: (clip) => _sendClip(clip)),
-    );
-  }
+
 
   Future<void> _sendClip(KlipyClip clip) async {
     try {
@@ -2911,64 +2885,42 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
         ),
-        suffixIcon: PullDownButton(
-          position: PullDownMenuPosition.automatic,
-          itemBuilder:
-              (context) => [
-                PullDownMenuItem(
-                  onTap: () {
-                    FocusScope.of(context).unfocus();
-                    setState(() {
-                      _isDrawingMode = true;
-                    });
-                  },
-                  title: 'Draw',
-                  icon: CupertinoIcons.paintbrush,
-                ),
-                PullDownMenuItem(
-                  onTap: () {
-                    FocusScope.of(context).unfocus();
-                    _showGifPicker();
-                  },
-                  title: 'Gifs',
-                  icon: CupertinoIcons.square_grid_3x2,
-                ),
-                PullDownMenuItem(
-                  onTap: () {
-                    FocusScope.of(context).unfocus();
-                    _showStickerPicker();
-                  },
-                  title: 'Stickers',
-                  icon: CupertinoIcons.smiley,
-                ),
-                PullDownMenuItem(
-                  // Using PullDownMenuItem for now, will make custom if needed
-                  onTap: () {
-                    FocusScope.of(context).unfocus();
-                    _showClipPicker();
-                  },
-                  title: 'Clips',
-                  icon:
-                      CupertinoIcons
-                          .play_rectangle_fill, // Using a suitable Cupertino icon for clips
-                ),
-              ],
-          buttonBuilder:
-              (context, showMenu) => IconButton(
-                icon: Icon(
-                  CupertinoIcons.add,
-                  color: Colors.white.withValues(alpha: 0.5),
-                  size: 24,
-                ),
-                onPressed: () {
-                  FocusScope.of(context).unfocus();
-                  showMenu();
-                },
-              ),
-        ),
+        suffixIcon: IconButton(
+            icon: Icon(
+              CupertinoIcons.add,
+              color: Colors.white.withValues(alpha: 0.5),
+              size: 24,
+            ),
+            onPressed: () {
+              FocusScope.of(context).unfocus();
+              _showMediaPickerModal();
+            },
+          ),
       ),
       maxLines: null,
       textCapitalization: TextCapitalization.sentences,
+    );
+  }
+
+  void _showMediaPickerModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => MediaPickerModal(
+        onGifSelected: (gif) {
+          _sendGif(gif);
+          Navigator.pop(context); // Close the modal after selection
+        },
+        onStickerSelected: (sticker) {
+          _sendSticker(sticker);
+          Navigator.pop(context); // Close the modal after selection
+        },
+        onClipSelected: (clip) {
+          _sendClip(clip);
+          Navigator.pop(context); // Close the modal after selection
+        },
+      ),
     );
   }
 
@@ -3360,18 +3312,29 @@ class _MessageBubble extends StatelessWidget {
                 onTap: () {
                   final gifUrl = message.metadata!['gifUrl'];
                   Navigator.of(context).push(
-                    MaterialPageRoute(
-                      fullscreenDialog: true,
-                      builder:
-                          (context) => FullscreenGifViewer(
-                            gifUrl: gifUrl,
-                            heroTag: message.messageId,
-                          ),
+                    PageRouteBuilder(
+                      opaque: false,
+                      pageBuilder: (BuildContext context, _, __) {
+                        return FullscreenGifViewer(
+                          gifUrl: gifUrl,
+                          heroTag: message.messageId, // Pass the heroTag
+                        );
+                      },
+                      // Remove custom transitions, let Hero handle it
+                      transitionsBuilder: (
+                        BuildContext context,
+                        Animation<double> animation,
+                        Animation<double> secondaryAnimation,
+                        Widget child,
+                      ) {
+                        return child; // Just return child, Hero handles animation
+                      },
+                      transitionDuration: const Duration(milliseconds: 300),
                     ),
                   );
                 },
                 child: Hero(
-                  tag: message.messageId,
+                  tag: message.messageId, // Unique tag for Hero
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
                     child: Image.network(

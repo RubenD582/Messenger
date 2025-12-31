@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
@@ -9,10 +8,12 @@ import '../config/klipy_config.dart';
 
 class ClipPickerSheet extends StatefulWidget {
   final Function(KlipyClip) onClipSelected;
+  final String searchQuery; // New parameter
 
   const ClipPickerSheet({
     super.key,
     required this.onClipSelected,
+    this.searchQuery = '', // Default to empty
   });
 
   @override
@@ -20,13 +21,8 @@ class ClipPickerSheet extends StatefulWidget {
 }
 
 class _ClipPickerSheetState extends State<ClipPickerSheet> {
-  final TextEditingController _searchController = TextEditingController();
-  final FocusNode _focusNode = FocusNode();
-
   List<KlipyClip> _clips = [];
   bool _isLoading = false;
-  bool _isSearchFocused = false;
-  Timer? _debounceTimer;
 
   final AudioPlayer _audioPlayer = AudioPlayer();
   int? _playingIndex;
@@ -35,33 +31,26 @@ class _ClipPickerSheetState extends State<ClipPickerSheet> {
   @override
   void initState() {
     super.initState();
-    _loadTrendingClips();
-    _focusNode.addListener(() {
-      setState(() {
-        _isSearchFocused = _focusNode.hasFocus;
-      });
-    });
+    _loadClips(widget.searchQuery);
   }
 
-  Future<void> _loadTrendingClips() async {
-    setState(() => _isLoading = true);
-    final clips = await KlipyService.getTrendingClips(limit: KlipyConfig.defaultLimit);
-    if (mounted) {
-      setState(() {
-        _clips = clips;
-        _isLoading = false;
-      });
+  @override
+  void didUpdateWidget(covariant ClipPickerSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.searchQuery != widget.searchQuery) {
+      _loadClips(widget.searchQuery);
     }
   }
 
-  Future<void> _searchClips(String query) async {
+  Future<void> _loadClips(String query) async {
+    setState(() => _isLoading = true);
+    List<KlipyClip> clips;
     if (query.trim().isEmpty) {
-      _loadTrendingClips();
-      return;
+      clips = await KlipyService.getTrendingClips(limit: KlipyConfig.defaultLimit);
+    } else {
+      clips = await KlipyService.searchClips(query, limit: KlipyConfig.defaultLimit);
     }
 
-    setState(() => _isLoading = true);
-    final clips = await KlipyService.searchClips(query, limit: KlipyConfig.defaultLimit);
     if (mounted) {
       setState(() {
         _clips = clips;
@@ -101,24 +90,14 @@ class _ClipPickerSheetState extends State<ClipPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-      height: MediaQuery.of(context).size.height * (_isSearchFocused ? 0.95 : 0.7),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade900,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Column(
-        children: [
-          _handleBar(),
-          _searchBar(),
-          Expanded(
-            child: _isLoading
-                ? const Center(
-                    child: CupertinoActivityIndicator(color: Colors.white, radius: 14),
-                  )
-                : GridView.builder(
+    return Column(
+      children: [
+        Expanded(
+          child: _isLoading
+              ? const Center(
+                  child: CupertinoActivityIndicator(color: Colors.white, radius: 14),
+                )
+              : GridView.builder(
                     padding: const EdgeInsets.all(12),
                     gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
@@ -133,7 +112,6 @@ class _ClipPickerSheetState extends State<ClipPickerSheet> {
                       return GestureDetector(
                         onTap: () {
                           widget.onClipSelected(clip);
-                          Navigator.pop(context);
                         },
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(12),
@@ -182,35 +160,9 @@ class _ClipPickerSheetState extends State<ClipPickerSheet> {
                     },
                   ),
           ),
-        ],
-      ),
+      ],
     );
   }
-
-  Widget _handleBar() => Container(
-        margin: const EdgeInsets.only(top: 12, bottom: 8),
-        width: 40,
-        height: 4,
-        decoration: BoxDecoration(
-          color: Colors.grey.shade800,
-          borderRadius: BorderRadius.circular(2),
-        ),
-      );
-
-  Widget _searchBar() => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        child: CupertinoSearchTextField(
-          controller: _searchController,
-          focusNode: _focusNode,
-          placeholder: "Search Clips...",
-          style: const TextStyle(color: Colors.white),
-          backgroundColor: Colors.grey.shade800,
-          onChanged: (value) {
-            _debounceTimer?.cancel();
-            _debounceTimer = Timer(const Duration(milliseconds: 500), () => _searchClips(value));
-          },
-        ),
-      );
 
   Widget _fallbackTile() => Container(
         color: Colors.grey.shade900,
@@ -220,9 +172,6 @@ class _ClipPickerSheetState extends State<ClipPickerSheet> {
   @override
   void dispose() {
     _audioPlayer.dispose();
-    _debounceTimer?.cancel();
-    _searchController.dispose();
-    _focusNode.dispose();
-    super.dispose();
+    super.dispose(); // Removed search related disposals
   }
 }
