@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'dart:async';
+import 'dart:math';
 
 import 'package:client/database/message_database.dart';
 import 'package:client/models/message.dart';
@@ -25,6 +26,8 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:client/widgets/clip_picker_sheet.dart';
 import 'package:client/screens/fullscreen_gif_viewer.dart';
 import 'package:client/widgets/media_picker_modal.dart'; // New import
+import 'package:client/widgets/effects_picker_modal.dart';
+import 'package:video_player/video_player.dart';
 
 class ChatScreen extends StatefulWidget {
   final String friendId;
@@ -79,6 +82,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Debug mode state
   bool _isDebugging = false;
+
+  // Message effect state
+  String? _selectedMessageEffect; // null, 'gift', etc.
+  Color? _selectedGiftColor;
 
   // Drag state for smooth dragging without rebuilds
   String? _draggingMessageId;
@@ -502,8 +509,37 @@ class _ChatScreenState extends State<ChatScreen> {
     _messageController.clear();
     FocusScope.of(context).unfocus(); // Hide keyboard after sending
 
+    // Prepare metadata if an effect is selected
+    Map<String, dynamic>? metadata;
+    if (_selectedMessageEffect != null) {
+      metadata = {
+        'effect': _selectedMessageEffect,
+      };
+
+      // Add gift color if selected
+      if (_selectedMessageEffect == 'gift' && _selectedGiftColor != null) {
+        metadata['giftColor'] = _selectedGiftColor!.value;
+      }
+
+      // Add love color if selected
+      if (_selectedMessageEffect == 'love' && _selectedGiftColor != null) {
+        metadata['loveColor'] = _selectedGiftColor!.value;
+      }
+    }
+
     // Send message (writes to local DB optimistically)
-    await _chatServiceWithStorage.sendMessage(text);
+    await _chatServiceWithStorage.sendMessage(
+      text,
+      metadata: metadata,
+    );
+
+    // Clear selected effect and color after sending
+    if (_selectedMessageEffect != null) {
+      setState(() {
+        _selectedMessageEffect = null;
+        _selectedGiftColor = null;
+      });
+    }
 
     // Reload just the new message from DB to show optimistically
     final newMessages = await MessageDatabase.getMessagesAfter(
@@ -671,6 +707,7 @@ class _ChatScreenState extends State<ChatScreen> {
         'type': 'gif',
         'gifId': gif.id,
         'gifUrl': gif.gifUrl,
+        'mp4Url': gif.mp4Url, // Add MP4 URL for audio playback
         'previewUrl': gif.previewUrl,
         'title': gif.title,
         'width': gif.width,
@@ -756,6 +793,22 @@ class _ChatScreenState extends State<ChatScreen> {
         print('Error sending clip: $error');
       }
     }
+  }
+
+  void _showEffectsBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => EffectsPickerModal(
+        onEffectSelected: (effectType, color) {
+          setState(() {
+            _selectedMessageEffect = effectType;
+            _selectedGiftColor = color;
+          });
+        },
+      ),
+    );
   }
 
   Future<void> _deleteAllMessages() async {
@@ -2703,6 +2756,75 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                         child: Row(
                           children: [
+                            // Plus icon button for menu
+                            if (!_isDrawingMode)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: PullDownButton(
+                                  position: PullDownMenuPosition.automatic,
+                                  itemBuilder: (context) => [
+                                    PullDownMenuItem(
+                                      onTap: () {
+                                        showModalBottomSheet(
+                                          context: context,
+                                          backgroundColor: Colors.transparent,
+                                          isScrollControlled: true,
+                                          builder: (context) =>
+                                              MediaPickerModal(
+                                            onGifSelected: (gif) {
+                                              _sendGif(gif);
+                                              Navigator.pop(context);
+                                            },
+                                            onStickerSelected: (sticker) {
+                                              _sendSticker(sticker);
+                                              Navigator.pop(context);
+                                            },
+                                            onClipSelected: (clip) {
+                                              _sendClip(clip);
+                                              Navigator.pop(context);
+                                            },
+                                          ),
+                                        );
+                                      },
+                                      title: 'Media',
+                                      icon: CupertinoIcons.photo,
+                                    ),
+                                    PullDownMenuItem(
+                                      onTap: () {
+                                        setState(() {
+                                          _isDrawingMode = true;
+                                        });
+                                      },
+                                      title: 'Paint',
+                                      icon: CupertinoIcons.paintbrush,
+                                    ),
+                                    PullDownMenuItem(
+                                      onTap: () {
+                                        _showEffectsBottomSheet();
+                                      },
+                                      title: 'Effects',
+                                      icon: CupertinoIcons.sparkles,
+                                    ),
+                                  ],
+                                  buttonBuilder: (context, showMenu) => Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF141414),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: IconButton(
+                                      padding: EdgeInsets.zero,
+                                      icon: const Icon(
+                                        CupertinoIcons.plus,
+                                        color: Colors.white,
+                                        size: 22,
+                                      ),
+                                      onPressed: showMenu,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             Expanded(
                               child: AnimatedCrossFade(
                                 firstChild: _buildTextInput(),
@@ -2863,31 +2985,9 @@ class _ChatScreenState extends State<ChatScreen> {
           vertical: 10,
         ),
         isDense: true,
-        prefixIcon: Padding(
-          padding: const EdgeInsets.all(8.0),
-          child: Container(
-            width: 32,
-            height: 32,
-            decoration: const BoxDecoration(
-              color: Color(0xFF5856D6),
-              shape: BoxShape.circle,
-            ),
-            child: IconButton(
-              padding: EdgeInsets.zero,
-              icon: const Icon(
-                CupertinoIcons.camera_fill,
-                color: Colors.white,
-                size: 18,
-              ),
-              onPressed: () {
-                // Camera action
-              },
-            ),
-          ),
-        ),
         suffixIcon: IconButton(
             icon: Icon(
-              CupertinoIcons.search,
+              CupertinoIcons.add,
               color: Colors.white.withValues(alpha: 0.5),
               size: 24,
             ),
@@ -2919,6 +3019,13 @@ class _ChatScreenState extends State<ChatScreen> {
         onClipSelected: (clip) {
           _sendClip(clip);
           Navigator.pop(context); // Close the modal after selection
+        },
+        onDrawingSelected: () {
+          setState(() {
+            _isDrawingMode = true;
+            _extraBottomSpace = 300; // Add space for drawing
+          });
+          FocusScope.of(context).unfocus(); // Hide keyboard
         },
       ),
     );
@@ -3142,6 +3249,17 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    // Dispose all cached clip controllers
+    if (kDebugMode) {
+      print('🧹 Cleaning up ${_clipControllers.length} cached clip controllers');
+    }
+    for (var controller in _clipControllers.values) {
+      controller.dispose();
+    }
+    _clipControllers.clear();
+    _clipMuteStates.clear();
+    _activeClipWidgets.clear();
+
     _messageController.dispose();
     _scrollController.dispose();
     _colorPageController.dispose();
@@ -3430,6 +3548,112 @@ class _MessageBubble extends StatelessWidget {
                 ),
               );
             },
+          ),
+        ),
+      );
+    }
+
+    // Special handling for Clip messages - render video player
+    if (message.messageType == 'clip' &&
+        message.metadata != null &&
+        message.metadata!['videoUrl'] != null) {
+      return Align(
+        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          child: Column(
+            crossAxisAlignment:
+                isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ClipMessageWidget(
+                key: ValueKey('normal_clip_${message.messageId}'),
+                message: message,
+                viewportWidth: MediaQuery.of(context).size.width,
+                viewportHeight: MediaQuery.of(context).size.height,
+              ),
+              if (showTimestamp) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _formatTime(message.timestamp),
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Special handling for Gift effect messages
+    if (message.metadata != null &&
+        message.metadata!['effect'] == 'gift') {
+      return Align(
+        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          child: Column(
+            crossAxisAlignment:
+                isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Wrap in Transform to ensure it renders with higher z-index
+              Transform.translate(
+                offset: Offset.zero,
+                child: _GiftMessageWidget(
+                  message: message,
+                  isMe: isMe,
+                ),
+              ),
+              if (showTimestamp) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _formatTime(message.timestamp),
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Special handling for Love effect messages
+    if (message.metadata != null &&
+        message.metadata!['effect'] == 'love') {
+      return Align(
+        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          child: Column(
+            crossAxisAlignment:
+                isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _LoveMessageWidget(
+                message: message,
+                isMe: isMe,
+              ),
+              if (showTimestamp) ...[
+                const SizedBox(height: 4),
+                Text(
+                  _formatTime(message.timestamp),
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
       );
@@ -4087,7 +4311,7 @@ class _StickerMessageWidget extends StatelessWidget {
 }
 
 // Widget for rendering clip messages
-class _ClipMessageWidget extends StatelessWidget {
+class _ClipMessageWidget extends StatefulWidget {
   final Message message;
   final double viewportWidth;
   final double viewportHeight;
@@ -4100,20 +4324,276 @@ class _ClipMessageWidget extends StatelessWidget {
   });
 
   @override
+  State<_ClipMessageWidget> createState() => _ClipMessageWidgetState();
+}
+
+// Global controller cache to survive widget rebuilds
+final Map<String, VideoPlayerController> _clipControllers = {};
+final Map<String, bool> _clipMuteStates = {};
+
+// Track all active clip widgets for global control
+final Map<String, _ClipMessageWidgetState> _activeClipWidgets = {};
+
+class _ClipMessageWidgetState extends State<_ClipMessageWidget> {
+  VideoPlayerController? _controller;
+  bool _isInitialized = false;
+  bool _isMuted = true; // Always start muted
+  Duration _lastPosition = Duration.zero; // Track last position to detect loops
+  static int _instanceCounter = 0;
+  late final int _instanceId;
+
+  @override
+  void initState() {
+    super.initState();
+    _instanceId = _instanceCounter++;
+    if (kDebugMode) {
+      print('🎬 ClipWidget initState [Instance #$_instanceId]: ${widget.message.messageId}');
+    }
+    // Register this widget globally
+    _activeClipWidgets[widget.message.messageId] = this;
+
+    // Check if controller already exists in cache (from previous widget instance)
+    final cachedController = _clipControllers[widget.message.messageId];
+    if (cachedController != null) {
+      if (kDebugMode) {
+        print('♻️ Reusing cached controller for: ${widget.message.messageId}');
+      }
+      _controller = cachedController;
+      _isInitialized = cachedController.value.isInitialized;
+      _isMuted = _clipMuteStates[widget.message.messageId] ?? true;
+
+      // Re-attach listener
+      _controller!.addListener(_onVideoPositionChanged);
+    } else {
+      // Initialize new controller
+      _initializePlayer();
+    }
+  }
+
+  @override
+  void didUpdateWidget(_ClipMessageWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (kDebugMode) {
+      print('🔄 ClipWidget didUpdateWidget [Instance #$_instanceId]: ${widget.message.messageId}');
+      print('   Controller exists: ${_controller != null}, Initialized: $_isInitialized');
+    }
+    // IMPORTANT: Never reinitialize - keep existing controller
+  }
+
+  Future<void> _initializePlayer() async {
+    final metadata = widget.message.metadata;
+    if (metadata == null || metadata['videoUrl'] == null) {
+      if (kDebugMode) print('⚠️ No video URL in metadata');
+      return;
+    }
+
+    final videoUrl = metadata['videoUrl'] as String;
+    if (kDebugMode) {
+      print('📼 Initializing player for: ${widget.message.messageId}');
+    }
+
+    try {
+      _controller = VideoPlayerController.networkUrl(
+        Uri.parse(videoUrl),
+        videoPlayerOptions: VideoPlayerOptions(
+          mixWithOthers: true,
+          allowBackgroundPlayback: false,
+        ),
+      );
+
+      await _controller!.initialize();
+
+      if (!mounted) {
+        if (kDebugMode) print('⚠️ Widget unmounted during init');
+        _controller?.dispose();
+        return;
+      }
+
+      _controller!.setLooping(true);
+      _controller!.setVolume(0.0); // Start muted
+      await _controller!.play(); // Start playing
+
+      // Listen for position to auto-mute after one loop
+      _controller!.addListener(_onVideoPositionChanged);
+
+      // Cache the controller and mute state
+      _clipControllers[widget.message.messageId] = _controller!;
+      _clipMuteStates[widget.message.messageId] = true;
+
+      setState(() => _isInitialized = true);
+
+      if (kDebugMode) {
+        print('✅ Clip initialized: ${widget.message.messageId}, isPlaying: ${_controller!.value.isPlaying}');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error initializing clip ${widget.message.messageId}: $e');
+      }
+    }
+  }
+
+  void _onVideoPositionChanged() {
+    if (_controller == null || !_controller!.value.isPlaying) return;
+
+    final currentPosition = _controller!.value.position;
+
+    // Detect loop: current position jumped back to near start from a later position
+    // This means the video looped (position went from high value to low value)
+    if (!_isMuted &&
+        currentPosition.inMilliseconds < 100 &&
+        _lastPosition.inMilliseconds > 500) {
+      // Video looped! Auto-mute after one complete playthrough
+      if (mounted) {
+        setState(() {
+          _isMuted = true;
+        });
+        _clipMuteStates[widget.message.messageId] = true; // Update cache
+        _controller!.setVolume(0);
+        if (kDebugMode) {
+          print('🔇 Auto-muted after loop detected: ${widget.message.messageId}');
+        }
+      }
+    }
+
+    // Update last position for next check
+    _lastPosition = currentPosition;
+  }
+
+  Future<void> _toggleMute() async {
+    if (kDebugMode) {
+      print('👆 Toggle mute clicked [Instance #$_instanceId]: ${widget.message.messageId}');
+    }
+
+    if (_controller == null) {
+      if (kDebugMode) print('⚠️ Cannot toggle: controller is null');
+      return;
+    }
+
+    if (!_isInitialized) {
+      if (kDebugMode) print('⚠️ Cannot toggle: not initialized');
+      return;
+    }
+
+    if (!mounted) {
+      if (kDebugMode) print('⚠️ Cannot toggle: not mounted');
+      return;
+    }
+
+    if (!_controller!.value.isInitialized) {
+      if (kDebugMode) print('⚠️ Cannot toggle: controller not initialized');
+      return;
+    }
+
+    // If unmuting, mute all others first
+    if (_isMuted) {
+      if (kDebugMode) print('   Muting all other clips...');
+      _muteAllOtherClips();
+      if (kDebugMode) print('   Done muting others');
+    }
+
+    final newMuteState = !_isMuted;
+    final newVolume = newMuteState ? 0.0 : 1.0;
+
+    if (kDebugMode) {
+      print('🔊 ${newMuteState ? 'Muting' : 'Unmuting'} [Instance #$_instanceId]: ${widget.message.messageId}');
+      print('   Before: volume=${_controller!.value.volume}, position=${_controller!.value.position.inMilliseconds}ms');
+    }
+
+    // When unmuting, seek to beginning FIRST before changing volume
+    if (!newMuteState) {
+      try {
+        await _controller!.seekTo(Duration.zero);
+        _lastPosition = Duration.zero;
+        if (kDebugMode) {
+          print('   ✅ Seeked to beginning');
+        }
+      } catch (e) {
+        if (kDebugMode) print('   ❌ Error seeking: $e');
+        return;
+      }
+    }
+
+    if (!mounted || _controller == null) {
+      if (kDebugMode) print('⚠️ Widget unmounted during seek');
+      return;
+    }
+
+    // Update UI state
+    setState(() {
+      _isMuted = newMuteState;
+    });
+
+    // Update cached state
+    _clipMuteStates[widget.message.messageId] = newMuteState;
+
+    // Set volume after seek completes
+    _controller!.setVolume(newVolume);
+
+    if (kDebugMode) {
+      print('   After: volume=${_controller!.value.volume}, position=${_controller!.value.position.inMilliseconds}ms');
+      print('   _toggleMute complete');
+    }
+  }
+
+  void _muteAllOtherClips() {
+    for (var entry in _activeClipWidgets.entries) {
+      if (entry.key != widget.message.messageId) {
+        final clipWidget = entry.value;
+        if (!clipWidget._isMuted &&
+            clipWidget._controller != null &&
+            clipWidget.mounted) {
+          try {
+            clipWidget._controller!.setVolume(0);
+            clipWidget.setState(() {
+              clipWidget._isMuted = true;
+            });
+          } catch (e) {
+            // Ignore if widget is disposed
+          }
+        }
+      }
+    }
+  }
+
+  void _disposePlayer() {
+    if (kDebugMode) {
+      print('🗑️ Disposing player [Instance #$_instanceId]: ${widget.message.messageId}');
+    }
+    // Only remove listener, keep controller in cache for reuse
+    _controller?.removeListener(_onVideoPositionChanged);
+    // DON'T dispose or null the controller - it's cached globally
+    _isInitialized = false;
+    // Don't call setState during dispose
+  }
+
+  @override
+  void dispose() {
+    if (kDebugMode) {
+      print('🗑️ ClipWidget dispose [Instance #$_instanceId]: ${widget.message.messageId}');
+    }
+    _activeClipWidgets.remove(widget.message.messageId);
+    _disposePlayer();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (kDebugMode) {
+      print('🏗️ Building clip widget [Instance #$_instanceId]: ${widget.message.messageId}, initialized: $_isInitialized, controller: ${_controller != null}');
+    }
+
     // Parse clip data from metadata
-    final metadata = message.metadata;
+    final metadata = widget.message.metadata;
     if (metadata == null || metadata['videoUrl'] == null) {
       return const SizedBox.shrink();
     }
 
-    final videoUrl = metadata['videoUrl'] as String;
     final clipWidth = (metadata['width'] as num?)?.toDouble() ?? 200.0;
     final clipHeight = (metadata['height'] as num?)?.toDouble() ?? 200.0;
 
     // Calculate display size - maintain aspect ratio but limit to reasonable size
-    final maxDisplayWidth = viewportWidth * 0.6; // Max 60% of screen width
-    final maxDisplayHeight = viewportHeight * 0.4; // Max 40% of screen height
+    final maxDisplayWidth = widget.viewportWidth * 0.6; // Max 60% of screen width
+    final maxDisplayHeight = widget.viewportHeight * 0.4; // Max 40% of screen height
 
     double displayWidth = clipWidth;
     double displayHeight = clipHeight;
@@ -4136,61 +4616,69 @@ class _ClipMessageWidget extends StatelessWidget {
     displayHeight = displayHeight.clamp(100.0, maxDisplayHeight);
 
     return Container(
-      width: displayWidth,
-      height: displayHeight,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Image.network(
-              metadata['previewUrl'] ??
-                  videoUrl, // Use previewUrl if available, else videoUrl
-              fit: BoxFit.cover,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) return child;
-                return Container(
-                  color: Colors.grey.shade900,
-                  child: const Center(
-                    child: CupertinoActivityIndicator(
-                      radius: 14.0,
-                      color: Colors.white,
-                    ),
-                  ),
-                );
-              },
-              errorBuilder: (context, error, stackTrace) {
-                return Container(
-                  color: Colors.grey.shade900,
-                  child: const Center(
-                    child: Icon(
-                      Icons.error_outline,
-                      color: Colors.grey,
-                      size: 40,
-                    ),
-                  ),
-                );
-              },
-            ),
-            const Icon(
-              // Play icon overlay
-              Icons.play_circle_fill,
-              color: Colors.white70,
-              size: 50,
+        width: displayWidth,
+        height: displayHeight,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
           ],
         ),
-      ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+            if (_isInitialized && _controller != null)
+              SizedBox.expand(
+                child: FittedBox(
+                  fit: BoxFit.cover,
+                  child: SizedBox(
+                    width: _controller!.value.size.width,
+                    height: _controller!.value.size.height,
+                    child: VideoPlayer(_controller!),
+                  ),
+                ),
+              )
+            else
+              Container(
+                color: Colors.grey.shade900,
+                child: const Center(
+                  child: CupertinoActivityIndicator(
+                    radius: 14.0,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+
+            // Mute/Unmute button (bottom-right)
+            if (_isInitialized && _controller != null)
+              Positioned(
+                bottom: 8,
+                right: 8,
+                child: GestureDetector(
+                  onTap: _toggleMute,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _isMuted ? Icons.volume_off : Icons.volume_up,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
     );
   }
 }
@@ -4352,4 +4840,352 @@ class _DrawingOverlayPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_DrawingOverlayPainter oldDelegate) => true;
+}
+
+// Gift Message Widget with opening animation
+class _GiftMessageWidget extends StatefulWidget {
+  final Message message;
+  final bool isMe;
+
+  const _GiftMessageWidget({
+    required this.message,
+    required this.isMe,
+  });
+
+  @override
+  State<_GiftMessageWidget> createState() => _GiftMessageWidgetState();
+}
+
+class _GiftMessageWidgetState extends State<_GiftMessageWidget>
+    with SingleTickerProviderStateMixin {
+  bool _isOpened = false; // Client-side only state
+  late AnimationController _animationController;
+  late Animation<double> _lidSlideAnimation;
+  late Animation<double> _lidRotateAnimation;
+  late Animation<double> _lidFallAnimation;
+  late Animation<double> _lidFadeAnimation;
+  late Color _giftColor;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Get color from metadata, or use default pink if not specified
+    if (widget.message.metadata != null &&
+        widget.message.metadata!['giftColor'] != null) {
+      _giftColor = Color(widget.message.metadata!['giftColor'] as int);
+    } else {
+      // Fallback to pink if no color in metadata
+      _giftColor = const Color(0xFFFF69B4);
+    }
+
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    );
+
+    // Lid slides up and rotates
+    _lidSlideAnimation = Tween<double>(begin: 0.0, end: -30.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.0, 0.3, curve: Curves.easeOut),
+      ),
+    );
+
+    _lidRotateAnimation = Tween<double>(begin: 0.0, end: 0.3).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.0, 0.3, curve: Curves.easeOut),
+      ),
+    );
+
+    // Lid falls way down off screen
+    _lidFallAnimation = Tween<double>(begin: 0.0, end: 1500.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.3, 1.0, curve: Curves.easeIn),
+      ),
+    );
+
+    // Lid fades out as it falls
+    _lidFadeAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: const Interval(0.3, 1.0, curve: Curves.easeIn),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  void _openGift() {
+    if (!_isOpened) {
+      setState(() {
+        _isOpened = true;
+      });
+      _animationController.forward();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: _openGift,
+      child: AnimatedBuilder(
+        animation: _animationController,
+        builder: (context, child) {
+          return IntrinsicWidth(
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                // The actual message bubble (EXACT same as normal messages)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  constraints: BoxConstraints(
+                    minWidth: 30,
+                    maxWidth: MediaQuery.of(context).size.width * 0.75,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _giftColor,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: Text(
+                    widget.message.message,
+                    style: AppTypography.body.copyWith(
+                      color: Colors.white,
+                      fontSize: 15,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+
+                // Lid covering the message (same position, same size) - rendered on top with high z-index
+                if (!_isOpened || _animationController.value < 1.0)
+                  Positioned.fill(
+                    child: Opacity(
+                      opacity: _isOpened ? _lidFadeAnimation.value : 1.0,
+                      child: Transform.translate(
+                        offset: Offset(
+                          0,
+                          _isOpened
+                              ? _lidSlideAnimation.value + _lidFallAnimation.value
+                              : 0,
+                        ),
+                        child: Transform.rotate(
+                          angle: _isOpened ? _lidRotateAnimation.value : 0,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: _giftColor,
+                              borderRadius: BorderRadius.circular(18),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.3),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 3),
+                                ),
+                              ],
+                            ),
+                            child: Stack(
+                              children: [
+                                // Vertical ribbon (goes all the way top to bottom)
+                                Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  top: 0,
+                                  bottom: 0,
+                                  child: Center(
+                                    child: Container(
+                                      width: 4,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                                // Horizontal ribbon (goes all the way left to right)
+                                Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  top: 0,
+                                  bottom: 0,
+                                  child: Center(
+                                    child: Container(
+                                      height: 4,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                                // Bow in the center
+                                Center(
+                                  child: SvgPicture.asset(
+                                    'assets/bow.svg',
+                                    width: 21,
+                                    height: 21,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// Love Message Widget with floating animated hearts
+class _LoveMessageWidget extends StatefulWidget {
+  final Message message;
+  final bool isMe;
+
+  const _LoveMessageWidget({
+    required this.message,
+    required this.isMe,
+  });
+
+  @override
+  State<_LoveMessageWidget> createState() => _LoveMessageWidgetState();
+}
+
+class _LoveMessageWidgetState extends State<_LoveMessageWidget>
+    with TickerProviderStateMixin {
+  late List<AnimationController> _heartControllers;
+  late List<Animation<double>> _heartAnimations;
+  late Color _loveColor;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Get color from metadata, or use default pink if not specified
+    if (widget.message.metadata != null &&
+        widget.message.metadata!['loveColor'] != null) {
+      _loveColor = Color(widget.message.metadata!['loveColor'] as int);
+    } else {
+      // Fallback to hot pink if no color in metadata
+      _loveColor = const Color(0xFFFF69B4);
+    }
+
+    // Create 5 animated hearts with different durations
+    _heartControllers = List.generate(
+      5,
+      (index) => AnimationController(
+        duration: Duration(milliseconds: 2000 + (index * 300)),
+        vsync: this,
+      )..repeat(reverse: true),
+    );
+
+    _heartAnimations = _heartControllers.map((controller) {
+      return Tween<double>(begin: -3.0, end: 3.0).animate(
+        CurvedAnimation(parent: controller, curve: Curves.easeInOut),
+      );
+    }).toList();
+  }
+
+  @override
+  void dispose() {
+    for (var controller in _heartControllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IntrinsicWidth(
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // The actual message bubble
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 8,
+            ),
+            constraints: BoxConstraints(
+              minWidth: 30,
+              maxWidth: MediaQuery.of(context).size.width * 0.75,
+            ),
+            decoration: BoxDecoration(
+              color: _loveColor, // Same color as hearts
+              borderRadius: BorderRadius.circular(18),
+            ),
+            child: Text(
+              widget.message.message,
+              style: AppTypography.body.copyWith(
+                color: Colors.white,
+                fontSize: 15,
+                height: 1.4,
+              ),
+            ),
+          ),
+
+          // Floating hearts around the message (bigger, closer)
+          // Top left heart (rendered first, behind left middle)
+          _buildFloatingHeart(0, -8, -6, 18, 0.1),
+          // Left middle heart (bigger, in front)
+          _buildFloatingHeart(2, -10, null, 22, -0.2, bottom: -8),
+          // Top right heart (moved more to left)
+          _buildFloatingHeart(1, null, -4, 14, 0.3, right: 0),
+          // Right bottom heart
+          _buildFloatingHeart(3, null, null, 12, 0.15, right: -8, bottom: -6),
+          // Left side heart
+          _buildFloatingHeart(4, -6, 12, 15, -0.25),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFloatingHeart(
+    int index,
+    double? left,
+    double? top,
+    double size,
+    double rotation, {
+    double? right,
+    double? bottom,
+  }) {
+    return AnimatedBuilder(
+      animation: _heartAnimations[index],
+      builder: (context, child) {
+        return Positioned(
+          left: left,
+          top: top != null ? top + _heartAnimations[index].value : null,
+          right: right,
+          bottom: bottom,
+          child: Transform.rotate(
+            angle: rotation,
+            child: ShaderMask(
+              shaderCallback: (bounds) {
+                return LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    _loveColor,
+                    _loveColor.withValues(alpha: 0.6),
+                  ],
+                ).createShader(bounds);
+              },
+              child: Icon(
+                CupertinoIcons.heart_fill,
+                size: size,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
 }

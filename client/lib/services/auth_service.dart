@@ -3,9 +3,10 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import '../config/api_config.dart';
 
 class AuthService {
-  static const String baseUrl = 'http://192.168.0.156:3000/auth';
+  static const String baseUrl = '${ApiConfig.baseUrl}/auth';
   static const _secureStorage = FlutterSecureStorage();
 
   Future<Map<String, dynamic>> registerWithEmail({
@@ -13,6 +14,7 @@ class AuthService {
     required String password,
     required String firstName,
     required String lastName,
+    required String username,
   }) async {
     try {
       final response = await http.post(
@@ -23,6 +25,7 @@ class AuthService {
           'password': password,
           'firstName': firstName,
           'lastName': lastName,
+          'username': username,
         }),
       );
 

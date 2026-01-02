@@ -11,7 +11,7 @@ docker-compose exec kafka kafka-topics --create \
   --topic chat-messages \
   --partitions 10 \
   --replication-factor 1 \
-  --bootstrap-server localhost:9092 \
+  --bootstrap-server kafka:9092 \
   --if-not-exists
 
 echo "✓ Created chat-messages topic"
@@ -21,7 +21,7 @@ docker-compose exec kafka kafka-topics --create \
   --topic typing-indicators \
   --partitions 5 \
   --replication-factor 1 \
-  --bootstrap-server localhost:9092 \
+  --bootstrap-server kafka:9092 \
   --if-not-exists
 
 echo "✓ Created typing-indicators topic"
@@ -31,7 +31,7 @@ docker-compose exec kafka kafka-topics --create \
   --topic read-receipts \
   --partitions 5 \
   --replication-factor 1 \
-  --bootstrap-server localhost:9092 \
+  --bootstrap-server kafka:9092 \
   --if-not-exists
 
 echo "✓ Created read-receipts topic"
@@ -39,7 +39,7 @@ echo "✓ Created read-receipts topic"
 # List all topics to verify
 echo ""
 echo "Verifying topics..."
-docker-compose exec kafka kafka-topics --list --bootstrap-server localhost:9092
+docker-compose exec kafka kafka-topics --list --bootstrap-server kafka:9092
 
 echo ""
 echo "✅ Kafka topics setup complete!"

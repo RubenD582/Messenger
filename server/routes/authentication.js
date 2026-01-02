@@ -13,6 +13,7 @@ const cors = require("cors");
 const winston = require("winston");
 const router = express.Router(); // Re-adding the router definition
 const { authenticateToken } = require("../middleware/authMiddleware");
+const graphService = require('../services/graphService'); // Import graphService
 
 // Load private and public keys for JWT signing and verification
 const privateKey = fs.readFileSync(path.join(__dirname, "../../config/keys/private_key.pem"), "utf8");
@@ -61,11 +62,11 @@ const SecurityService = require("../services/securityService");
  * Register a new user with email and send OTP for verification
  */
 router.post("/register-with-email", loginRegisterLimiter, async (req, res) => {
-  const { email, password, firstName, lastName } = req.body;
+  const { email, password, firstName, lastName, username } = req.body;
 
   try {
     // Validate input
-    if (!email || !password || !firstName || !lastName) {
+    if (!email || !password || !firstName || !lastName || !username) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -73,6 +74,12 @@ router.post("/register-with-email", loginRegisterLimiter, async (req, res) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({ message: "Invalid email format" });
+    }
+
+    // Validate username format (alphanumeric, underscores, dots, 3-20 characters)
+    const usernameRegex = /^[a-zA-Z0-9_.]{3,20}$/;
+    if (!usernameRegex.test(username)) {
+      return res.status(400).json({ message: "Username must be 3-20 characters and contain only letters, numbers, underscores, or dots" });
     }
 
     // Validate password
@@ -85,6 +92,12 @@ router.post("/register-with-email", loginRegisterLimiter, async (req, res) => {
     const existingUser = await db.query("SELECT * FROM users WHERE email = $1", [email]);
     if (existingUser.rows.length > 0) {
       return res.status(400).json({ message: "Email already registered" });
+    }
+
+    // Check if username already exists
+    const existingUsername = await db.query("SELECT * FROM users WHERE username = $1", [username.toLowerCase()]);
+    if (existingUsername.rows.length > 0) {
+      return res.status(400).json({ message: "Username already taken" });
     }
 
     // Hash password
@@ -112,6 +125,7 @@ router.post("/register-with-email", loginRegisterLimiter, async (req, res) => {
       password: hashedPassword,
       firstName,
       lastName,
+      username: username.toLowerCase(), // Store lowercase for consistency
     };
     await redisClient.set(
       `temp:user:${email}`,
@@ -163,8 +177,8 @@ router.post("/verify-email", async (req, res) => {
 
     // Create user in database
     const result = await db.query(
-      "INSERT INTO users (email, password, first_name, last_name, email_verified) VALUES ($1, $2, $3, $4, $5) RETURNING id, email, first_name, last_name",
-      [tempUserData.email, tempUserData.password, tempUserData.firstName, tempUserData.lastName, true]
+      "INSERT INTO users (email, password, first_name, last_name, username, email_verified) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, email, first_name, last_name, username",
+      [tempUserData.email, tempUserData.password, tempUserData.firstName, tempUserData.lastName, tempUserData.username, true]
     );
 
     const user = result.rows[0];
@@ -194,6 +208,7 @@ router.post("/verify-email", async (req, res) => {
       user: {
         id: user.id,
         email: user.email,
+        username: user.username,
         firstName: user.first_name,
         lastName: user.last_name,
       },
@@ -258,6 +273,20 @@ router.post("/login-with-email", loginRegisterLimiter, async (req, res) => {
 
     // SUCCESS: Clear failed login attempts
     await SecurityService.clearFailedLogins(email);
+
+    // Ensure user exists in the graph database
+    try {
+      await graphService.ensureUserNode(
+        user.id,
+        `${user.first_name} ${user.last_name}`,
+        null, // country - not available at login
+        null, // province - not available at login
+        null  // city - not available at login
+      );
+    } catch (graphError) {
+      logger.error(`Failed to ensure user node in graph for user ${user.id}:`, graphError);
+      // Non-fatal error, log it but allow login to continue
+    }
 
     // Check if email is verified
     if (!user.email_verified) {
@@ -503,6 +532,77 @@ router.get("/me", authenticateToken, async (req, res) => {
     });
   } catch (error) {
     logger.error("Error in /auth/me endpoint:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+/**
+ * POST /auth/update-location
+ * Update user's location for friend suggestions
+ */
+router.post("/update-location", authenticateToken, async (req, res) => {
+  const userId = req.user.userId;
+  const { latitude, longitude, country, countryCode, city, state } = req.body;
+
+  try {
+    // Validate required fields
+    if (!latitude || !longitude) {
+      return res.status(400).json({ message: "Latitude and longitude are required" });
+    }
+
+    // Update user's location in database
+    await db.query(
+      `UPDATE users
+       SET latitude = $1,
+           longitude = $2,
+           country = $3,
+           country_code = $4,
+           city = $5,
+           state = $6,
+           location_enabled = true,
+           location_updated_at = NOW()
+       WHERE id = $7`,
+      [latitude, longitude, country, countryCode, city, state, userId]
+    );
+
+    // Get user's name for graph update
+    const userResult = await db.query(
+      "SELECT first_name, last_name FROM users WHERE id = $1",
+      [userId]
+    );
+
+    if (userResult.rows.length > 0) {
+      const user = userResult.rows[0];
+      const userName = `${user.first_name} ${user.last_name}`;
+
+      // Update RedisGraph with user location
+      try {
+        await graphService.ensureUserNode(
+          userId,
+          userName,
+          country || null,
+          state || null,
+          city || null
+        );
+        logger.info(`Updated location for user ${userId} in RedisGraph`);
+      } catch (graphError) {
+        // Log error but don't fail the request if graph update fails
+        logger.error(`Failed to update RedisGraph for user ${userId}:`, graphError);
+      }
+    }
+
+    logger.info(`Location updated for user ${userId}: ${city}, ${country}`);
+    res.json({
+      success: true,
+      message: "Location updated successfully",
+      location: {
+        city,
+        country,
+        countryCode
+      }
+    });
+  } catch (error) {
+    logger.error("Error updating location:", error);
     res.status(500).json({ message: "Server error" });
   }
 });

@@ -340,29 +340,66 @@ class ApiService {
     }
   }
 
-  Future<dynamic> searchUsers(String query) async {
+  Future<List<Map<String, dynamic>>> searchUsers(String userId, String query) async {
+    if (query.trim().isEmpty) {
+      return [];
+    }
+
+    final String apiUrl = '$baseUrl/suggestions/search/$userId?query=${Uri.encodeComponent(query)}';
+    String? token = await AuthService.getToken();
+
     try {
-      final token = await AuthService.getToken();
-      final response = await http.get(
-        Uri.parse('$baseUrl/friends/search?q=$query'),
+      var response = await http.get(
+        Uri.parse(apiUrl),
         headers: {
           'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
         },
       );
 
-      if (response.statusCode == 200) {
-        return json.decode(response.body)['users'];
+      // If token expired (403), try to refresh and retry once
+      if (response.statusCode == 403 || response.statusCode == 401) {
+        if (kDebugMode) {
+          print('Token expired, attempting to refresh...');
+        }
+
+        final refreshResult = await AuthService.refreshAccessToken();
+        if (refreshResult['success'] == true) {
+          token = refreshResult['accessToken'];
+
+          // Retry the request with new token
+          response = await http.get(
+            Uri.parse(apiUrl),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+          );
+        } else {
+          if (kDebugMode) {
+            print('Token refresh failed: ${refreshResult['error']}');
+          }
+          return [];
+        }
       }
 
-      return [];
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        return List<Map<String, dynamic>>.from(data);
+      } else if (response.statusCode == 404) {
+        return [];
+      } else {
+        throw Exception('Failed to search users: ${response.statusCode}');
+      }
     } catch (error) {
       if (kDebugMode) {
-        print('Error fetching pending requests: $error');
+        print('Error searching users: $error');
       }
+      return [];
     }
   }
 
-  void sendFriendRequest(String friendId, String uuid) async {
+  Future<Map<String, dynamic>> sendFriendRequest(String friendId, String uuid) async {
     final url = Uri.parse('$baseUrl/friends/send-request');
 
     final body = json.encode({
@@ -381,20 +418,95 @@ class ApiService {
         body: body,
       );
 
-      if (response.statusCode == 400) {
+      if (response.statusCode == 201) {
+        final data = json.decode(response.body);
+        if (kDebugMode) {
+          print("Friend request sent successfully: ${data['message']}");
+        }
+        return {
+          'success': true,
+          'message': data['message'],
+          'autoAccepted': data['autoAccepted'] ?? false,
+        };
+      } else if (response.statusCode == 400) {
         final errorData = json.decode(response.body);
         if (kDebugMode) {
-          print("${errorData['message']}");
+          print("Friend request failed: ${errorData['message']}");
         }
+        return {
+          'success': false,
+          'message': errorData['message'],
+        };
       } else {
         if (kDebugMode) {
-          print("${response.statusCode}, ${response.body}");
+          print("Unexpected response: ${response.statusCode}, ${response.body}");
         }
+        return {
+          'success': false,
+          'message': 'Unexpected error occurred',
+        };
       }
     } catch (error) {
       if (kDebugMode) {
         print("Error sending friend request: $error");
       }
+      return {
+        'success': false,
+        'message': 'Network error: $error',
+      };
+    }
+  }
+
+  // New method to fetch friend suggestions
+  Future<List<Map<String, dynamic>>> getFriendSuggestions(String userId) async {
+    final String apiUrl = '$baseUrl/suggestions/$userId';
+    String? token = await AuthService.getToken();
+
+    try {
+      var response = await http.get(
+        Uri.parse(apiUrl),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      // If token expired (403), try to refresh and retry once
+      if (response.statusCode == 403 || response.statusCode == 401) {
+        if (kDebugMode) {
+          print('Token expired, attempting to refresh...');
+        }
+
+        final refreshResult = await AuthService.refreshAccessToken();
+        if (refreshResult['success'] == true) {
+          token = refreshResult['accessToken'];
+
+          // Retry the request with new token
+          response = await http.get(
+            Uri.parse(apiUrl),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+          );
+        } else {
+          throw Exception('Token refresh failed: ${refreshResult['error']}');
+        }
+      }
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        return List<Map<String, dynamic>>.from(data);
+      } else if (response.statusCode == 404) {
+        return [];
+      } else {
+        throw Exception('Failed to load friend suggestions: ${response.statusCode}');
+      }
+    } catch (error) {
+      if (kDebugMode) {
+        print('Error fetching friend suggestions: $error');
+      }
+      rethrow; // Re-throw to be caught by the caller
     }
   }
 

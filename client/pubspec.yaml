@@ -63,7 +63,12 @@ dependencies:
   # Video player for clips
   video_player: ^2.10.1
   audioplayers: ^6.5.1
+  media_kit: ^1.1.10
+  media_kit_video: ^1.2.4
+  media_kit_libs_ios_video: ^1.1.4
   cached_network_image: ^3.3.1
+  geolocator: ^14.0.2
+  geocoding: ^4.0.0
 
 dev_dependencies:
   flutter_test:
@@ -98,6 +103,7 @@ flutter:
     - assets/pencil.png
     - assets/highlighter.png
     - assets/neon.png
+    - assets/bow.svg
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see

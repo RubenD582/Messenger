@@ -106,6 +106,7 @@ class KlipyClip {
     }
 
     final file = json['file'] as Map<String, dynamic>?;
+    final fileMeta = json['file_meta'] as Map<String, dynamic>?;
 
     String? videoUrl;
     String? previewUrl;
@@ -113,28 +114,16 @@ class KlipyClip {
     int height = 200;
 
     if (file != null) {
-      final hd = file['hd'] as Map<String, dynamic>?;
-      final md = file['md'] as Map<String, dynamic>?;
+      // Direct URL strings in file object (not nested)
+      videoUrl = file['mp4'] as String?;
+      previewUrl = file['gif'] as String? ?? file['webp'] as String?;
 
-      if (hd != null) {
-        // Assuming MP4 is the primary video format
-        final mp4 = hd['mp4'] as Map<String, dynamic>?;
-
-        if (mp4 != null) {
-          videoUrl = mp4['url'] as String?;
-          width = (mp4['width'] as num?)?.toInt() ?? 200;
-          height = (mp4['height'] as num?)?.toInt() ?? 200;
-        }
-      }
-
-      if (md != null) {
-        final webp = md['webp'] as Map<String, dynamic>?; // Look for webp image preview
-        final gif = md['gif'] as Map<String, dynamic>?;   // Look for gif image preview
-
-        final previewFormat = webp ?? gif; // Prioritize webp
-
-        if (previewFormat != null) {
-          previewUrl = previewFormat['url'] as String?;
+      // Get dimensions from file_meta
+      if (fileMeta != null) {
+        final mp4Meta = fileMeta['mp4'] as Map<String, dynamic>?;
+        if (mp4Meta != null) {
+          width = (mp4Meta['width'] as num?)?.toInt() ?? 200;
+          height = (mp4Meta['height'] as num?)?.toInt() ?? 200;
         }
       }
     }

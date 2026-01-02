@@ -119,12 +119,12 @@ First app launch:
 
 ## Performance Benefits
 
-| Operation | Before | After | Improvement |
-|-----------|--------|-------|-------------|
-| Open chat | ~500ms | ~10ms | 50x faster |
-| Scroll up | ~500ms | ~10ms | 50x faster |
-| Search messages | Not possible | ~50ms | Instant |
-| Offline access | None | Full | ∞ |
+| Operation         | Before        | After | Improvement |
+|-------------------|---------------|-------|-------------|
+| Open chat         | ~500ms        | ~10ms | 50x faster  |
+| Scroll up         | ~500ms        | ~10ms | 50x faster  |
+| Search messages   | Not possible  | ~50ms | Instant     |
+| Offline access    | None          | Full  |   ∞         |
 
 ## Storage Usage
 

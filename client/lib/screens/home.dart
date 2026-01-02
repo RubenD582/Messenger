@@ -3,9 +3,10 @@ import 'dart:ui';
 
 import 'package:client/screens/requests.dart';
 import 'package:client/screens/chat_screen.dart';
-import 'search.dart';
+import 'discover.dart' as discover;
 import 'package:client/services/api_service.dart';
 import 'package:client/services/auth_service.dart';
+import 'package:client/services/location_service.dart';
 import 'package:client/theme/colors.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -13,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_sticky_header/flutter_sticky_header.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:hive/hive.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 
 class Home extends StatefulWidget {
   const Home({super.key});
@@ -39,6 +41,7 @@ class _HomeState extends State<Home> {
   int _pendingFriendRequestsCount = 0;
 
   late String uuid;
+  final LocationService _locationService = LocationService();
 
   @override
   void initState() {
@@ -51,6 +54,9 @@ class _HomeState extends State<Home> {
       _openFriendsBox().then((_) {
         fetchFriends();
       });
+
+      // Update location on app launch/login
+      _updateLocationOnLaunch();
 
       _scrollController.addListener(() {
         setState(() {
@@ -67,6 +73,53 @@ class _HomeState extends State<Home> {
     }).catchError((error) {
       _showErrorDialog(error.toString());  // Show error dialog
     });
+  }
+
+  Future<void> _updateLocationOnLaunch() async {
+    try {
+      // Check if location is enabled
+      final isLocationEnabled = await _locationService.isLocationEnabled();
+
+      if (isLocationEnabled) {
+        // Get current location
+        final locationData = await _locationService.getCurrentLocation();
+
+        if (locationData != null) {
+          // Update on backend
+          final success = await _locationService.updateLocationOnBackend();
+
+          if (success && mounted) {
+            final country = locationData['country'] as String? ?? 'Unknown';
+            final state = locationData['state'] as String? ?? 'Unknown';
+            final city = locationData['city'] as String? ?? 'Unknown';
+
+            // Show toast with location info
+            Fluttertoast.showToast(
+              msg: "📍 $city, $state, $country",
+              toastLength: Toast.LENGTH_LONG,
+              gravity: ToastGravity.TOP,
+              timeInSecForIosWeb: 3,
+              backgroundColor: const Color(0xFF0095F6),
+              textColor: Colors.white,
+              fontSize: 14.0,
+            );
+
+            if (kDebugMode) {
+              print('Location updated on home screen launch: $city, $state, $country');
+            }
+          }
+        }
+      } else {
+        if (kDebugMode) {
+          print('Location not enabled, skipping auto-update');
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error updating location on launch: $e');
+      }
+      // Don't show error to user, just fail silently
+    }
   }
 
   void _showErrorDialog(String errorMessage) {
@@ -178,7 +231,7 @@ class _HomeState extends State<Home> {
   void _showSearchModal() {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => SearchPage()),
+      MaterialPageRoute(builder: (context) => discover.SearchPage()),
     );
   }
 

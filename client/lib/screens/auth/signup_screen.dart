@@ -18,6 +18,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final PageController _pageController = PageController();
   final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _lastNameController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
@@ -25,6 +26,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   final FocusNode _firstNameFocusNode = FocusNode();
   final FocusNode _lastNameFocusNode = FocusNode();
+  final FocusNode _usernameFocusNode = FocusNode();
   final FocusNode _emailFocusNode = FocusNode();
   final FocusNode _passwordFocusNode = FocusNode();
   final FocusNode _confirmPasswordFocusNode = FocusNode();
@@ -46,6 +48,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
       if (_pageController.page! < 0.5) {
         _currentPageTitle = "What's your name?";
       } else if (_pageController.page! < 1.5) {
+        _currentPageTitle = "Choose a username";
+      } else if (_pageController.page! < 2.5) {
         _currentPageTitle = "What's your email?";
       } else {
         _currentPageTitle = "Create a password";
@@ -59,11 +63,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
     _pageController.dispose();
     _firstNameController.dispose();
     _lastNameController.dispose();
+    _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _firstNameFocusNode.dispose();
     _lastNameFocusNode.dispose();
+    _usernameFocusNode.dispose();
     _emailFocusNode.dispose();
     _passwordFocusNode.dispose();
     _confirmPasswordFocusNode.dispose();
@@ -90,6 +96,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       password: _passwordController.text,
       firstName: _firstNameController.text.trim(),
       lastName: _lastNameController.text.trim(),
+      username: _usernameController.text.trim(),
     );
 
     setState(() {
@@ -169,6 +176,33 @@ class _SignUpScreenState extends State<SignUpScreen> {
               if (_firstNameController.text.trim().isEmpty ||
                   _lastNameController.text.trim().isEmpty) {
                 Fluttertoast.showToast(msg: 'Please enter your name');
+                return;
+              }
+              _pageController.nextPage(
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+              );
+            },
+          ),
+          _buildStep(
+            description: "This is how friends will find you.",
+            fields: [
+              CustomCupertinoTextField(
+                label: 'Username',
+                hintText: 'Enter username',
+                controller: _usernameController,
+                focusNode: _usernameFocusNode,
+              ),
+            ],
+            onNext: () {
+              final username = _usernameController.text.trim();
+              final usernameRegex = RegExp(r'^[a-zA-Z0-9_.]{3,20}$');
+              if (username.isEmpty) {
+                Fluttertoast.showToast(msg: 'Please enter a username');
+                return;
+              }
+              if (!usernameRegex.hasMatch(username)) {
+                Fluttertoast.showToast(msg: 'Username must be 3-20 characters (letters, numbers, _, .)');
                 return;
               }
               _pageController.nextPage(

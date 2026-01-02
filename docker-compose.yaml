@@ -44,7 +44,7 @@ services:
       context: ./server
       dockerfile: ./database/Dockerfile
     environment:
-      - DB_HOST=${DB_HOST}
+      - DB_HOST=postgres
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME}
@@ -57,7 +57,7 @@ services:
 
   # Redis Master
   redis-master:
-    image: redis:7-alpine
+    image: falkordb/falkordb
     container_name: redis-master
     ports:
       - "6379:6379"
@@ -65,11 +65,11 @@ services:
       - messanger_mynetwork
     volumes:
       - redis_master_data:/data
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redispass123}
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redispass123} --loadmodule /usr/lib/redis/modules/falkor.so
 
   # Redis Replica
   redis-replica:
-    image: redis:7-alpine
+    image: falkordb/falkordb
     container_name: redis-replica
     ports:
       - "6380:6379"
@@ -77,13 +77,13 @@ services:
       - messanger_mynetwork
     volumes:
       - redis_replica_data:/data
-    command: redis-server --appendonly yes --slaveof redis-master 6379 --masterauth ${REDIS_PASSWORD:-redispass123} --requirepass ${REDIS_PASSWORD:-redispass123}
+    command: redis-server --appendonly yes --slaveof redis-master 6379 --masterauth ${REDIS_PASSWORD:-redispass123} --requirepass ${REDIS_PASSWORD:-redispass123} --loadmodule /usr/lib/redis/modules/falkor.so
     depends_on:
       - redis-master
 
   # Redis Sentinel 1
   redis-sentinel-1:
-    image: redis:7-alpine
+    image: falkordb/falkordb
     container_name: redis-sentinel-1
     ports:
       - "26379:26379"
@@ -98,7 +98,7 @@ services:
 
   # Redis Sentinel 2
   redis-sentinel-2:
-    image: redis:7-alpine
+    image: falkordb/falkordb
     container_name: redis-sentinel-2
     ports:
       - "26380:26379"
@@ -113,7 +113,7 @@ services:
 
   # Redis Sentinel 3
   redis-sentinel-3:
-    image: redis:7-alpine
+    image: falkordb/falkordb
     container_name: redis-sentinel-3
     ports:
       - "26381:26379"

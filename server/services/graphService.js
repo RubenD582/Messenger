@@ -171,9 +171,43 @@ async function getFriendSuggestions(currentUserId, limit = 10) {
         .slice(0, limit) // Take top 'limit' suggestions after scoring
         .map(entry => ({ userId: entry[0], score: entry[1] })); // Format as objects
 
-    // For simplicity, let's just return the userIds for now.
-    // In a real app, you'd fetch user details for these IDs.
-    return sortedSuggestions.map(s => s.userId);
+    const userIdsToFetch = sortedSuggestions.map(s => s.userId);
+
+    if (userIdsToFetch.length === 0) {
+        return [];
+    }
+
+    // Fetch details for the suggested user IDs
+    const userDetailsQuery = `
+        MATCH (u:User)
+        WHERE u.userId IN $userIds
+        RETURN u.userId, u.name, u.country, u.province, u.city
+    `;
+    const userDetailsResult = await graph.query('social_graph', userDetailsQuery, { userIds: userIdsToFetch });
+
+    // Create a map for easy lookup
+    const userDetailsMap = new Map();
+    userDetailsResult.data.forEach(row => {
+        userDetailsMap.set(row[0], {
+            userId: row[0],
+            name: row[1],
+            country: row[2],
+            province: row[3],
+            city: row[4]
+            // NOTE: profile_picture is not in the graph node currently
+        });
+    });
+
+    // Combine scores with details
+    const finalSuggestions = sortedSuggestions.map(s => {
+        const details = userDetailsMap.get(s.userId);
+        return {
+            ...details,
+            score: s.score
+        };
+    }).filter(s => s.userId); // Filter out any potential nulls if details weren't found
+
+    return finalSuggestions;
 }
 
 module.exports = {

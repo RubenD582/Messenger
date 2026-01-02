@@ -71,17 +71,20 @@ const graphService = require('./services/graphService'); // Import graphService
 // Kafka and Graph Database Connection and Subscription
 (async () => {
   try {
-    await connectKafka();
-    await graphService.connectToGraph(); // Connect to RedisGraph
-    
-    // Subscribe to topics here if needed
+    // Subscribe to topics BEFORE connecting the consumer
     await consumer.subscribe({ 
       topic: 'friend-events', 
       fromBeginning: false 
     });
+    console.log('Kafka consumer subscribed to friend-events');
+
+    // Now, connect all Kafka clients
+    await connectKafka();
     
-    console.log('Kafka connected and subscribed to friend-events');
+    // Connect to RedisGraph
+    await graphService.connectToGraph();
     console.log('Graph database connected.');
+
   } catch (error) {
     console.error('Failed to connect to services:', error);
     process.exit(1); // Exit if any essential service connection fails

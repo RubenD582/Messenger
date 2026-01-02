@@ -9,18 +9,20 @@ import 'package:client/widgets/clip_picker_sheet.dart';
 import 'package:client/services/tenor_service.dart'; // For TenorGif
 import 'package:client/services/klipy_service.dart'; // For KlipySticker, KlipyClip
 
-enum MediaType { gif, sticker, clip }
+enum MediaType { gif, sticker, clip, drawing }
 
 class MediaPickerModal extends StatefulWidget {
   final Function(TenorGif) onGifSelected;
   final Function(KlipySticker) onStickerSelected;
   final Function(KlipyClip) onClipSelected;
+  final VoidCallback? onDrawingSelected;
 
   const MediaPickerModal({
     super.key,
     required this.onGifSelected,
     required this.onStickerSelected,
     required this.onClipSelected,
+    this.onDrawingSelected,
   });
 
   @override
@@ -140,24 +142,31 @@ class _MediaPickerModalState extends State<MediaPickerModal> {
                 },
                 children: const <MediaType, Widget>{
                   MediaType.gif: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6), // Smaller padding
+                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                     child: Text(
                       'GIFs',
-                      style: TextStyle(color: Colors.white),
+                      style: TextStyle(color: Colors.white, fontSize: 13),
                     ),
                   ),
                   MediaType.sticker: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6), // Smaller padding
+                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                     child: Text(
                       'Stickers',
-                      style: TextStyle(color: Colors.white),
+                      style: TextStyle(color: Colors.white, fontSize: 13),
                     ),
                   ),
                   MediaType.clip: Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6), // Smaller padding
+                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
                     child: Text(
                       'Clips',
-                      style: TextStyle(color: Colors.white),
+                      style: TextStyle(color: Colors.white, fontSize: 13),
+                    ),
+                  ),
+                  MediaType.drawing: Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                    child: Text(
+                      'Draw',
+                      style: TextStyle(color: Colors.white, fontSize: 13),
                     ),
                   ),
                 },
@@ -189,6 +198,7 @@ class _MediaPickerModalState extends State<MediaPickerModal> {
                   onClipSelected: widget.onClipSelected,
                   searchQuery: _currentSearchQuery,
                 ),
+                _buildDrawingTab(),
               ],
             ),
           ),
@@ -209,6 +219,60 @@ class _MediaPickerModalState extends State<MediaPickerModal> {
     );
   }
 
+  Widget _buildDrawingTab() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            CupertinoIcons.paintbrush_fill,
+            size: 80,
+            color: Colors.grey[700],
+          ),
+          const SizedBox(height: 24),
+          Text(
+            'Start Drawing',
+            style: TextStyle(
+              color: Colors.grey[400],
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Tap the button below to start drawing',
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 32),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              widget.onDrawingSelected?.call();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF5856D6),
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              'Start Drawing',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _getPlaceholderText() {
     switch (_selectedMediaType) {
       case MediaType.gif:
@@ -217,6 +281,8 @@ class _MediaPickerModalState extends State<MediaPickerModal> {
         return 'Search Stickers...';
       case MediaType.clip:
         return 'Search for Clips...';
+      case MediaType.drawing:
+        return 'Drawing mode';
     }
   }
 

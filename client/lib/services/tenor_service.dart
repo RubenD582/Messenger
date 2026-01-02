@@ -8,6 +8,7 @@ class TenorGif {
   final String title;
   final String previewUrl; // Small preview
   final String gifUrl; // Full size GIF
+  final String? mp4Url; // MP4 video with audio
   final int width;
   final int height;
 
@@ -16,6 +17,7 @@ class TenorGif {
     required this.title,
     required this.previewUrl,
     required this.gifUrl,
+    this.mp4Url,
     required this.width,
     required this.height,
   });
@@ -27,11 +29,15 @@ class TenorGif {
     final tinygif = mediaFormats['tinygif'] as Map<String, dynamic>?;
     final gif = mediaFormats['gif'] as Map<String, dynamic>;
 
+    // Get MP4 for audio playback
+    final mp4 = mediaFormats['mp4'] as Map<String, dynamic>?;
+
     return TenorGif(
       id: json['id'] as String,
       title: json['title'] as String? ?? json['content_description'] as String? ?? 'GIF',
       previewUrl: tinygif?['url'] as String? ?? gif['url'] as String,
       gifUrl: gif['url'] as String,
+      mp4Url: mp4?['url'] as String?,
       width: (gif['dims'][0] as num).toInt(),
       height: (gif['dims'][1] as num).toInt(),
     );
@@ -43,6 +49,7 @@ class TenorGif {
       'title': title,
       'previewUrl': previewUrl,
       'gifUrl': gifUrl,
+      'mp4Url': mp4Url,
       'width': width,
       'height': height,
     };
