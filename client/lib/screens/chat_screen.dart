@@ -2985,51 +2985,13 @@ class _ChatScreenState extends State<ChatScreen> {
           vertical: 10,
         ),
         isDense: true,
-        suffixIcon: IconButton(
-            icon: Icon(
-              CupertinoIcons.add,
-              color: Colors.white.withValues(alpha: 0.5),
-              size: 24,
-            ),
-            onPressed: () {
-              FocusScope.of(context).unfocus();
-              _showMediaPickerModal();
-            },
-          ),
       ),
       maxLines: null,
       textCapitalization: TextCapitalization.sentences,
     );
   }
 
-  void _showMediaPickerModal() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => MediaPickerModal(
-        onGifSelected: (gif) {
-          _sendGif(gif);
-          Navigator.pop(context); // Close the modal after selection
-        },
-        onStickerSelected: (sticker) {
-          _sendSticker(sticker);
-          Navigator.pop(context); // Close the modal after selection
-        },
-        onClipSelected: (clip) {
-          _sendClip(clip);
-          Navigator.pop(context); // Close the modal after selection
-        },
-        onDrawingSelected: () {
-          setState(() {
-            _isDrawingMode = true;
-            _extraBottomSpace = 300; // Add space for drawing
-          });
-          FocusScope.of(context).unfocus(); // Hide keyboard
-        },
-      ),
-    );
-  }
+
 
   Widget _buildBrushButton({
     required BrushType brushType,
@@ -3632,7 +3594,9 @@ class _MessageBubble extends StatelessWidget {
       return Align(
         alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
         child: Container(
-          margin: const EdgeInsets.only(bottom: 6),
+          // Extra bottom margin to prevent next message from overlapping with hearts
+          margin: const EdgeInsets.only(bottom: 30),
+          clipBehavior: Clip.none,
           child: Column(
             crossAxisAlignment:
                 isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
@@ -5062,19 +5026,38 @@ class _LoveMessageWidgetState extends State<_LoveMessageWidget>
     with TickerProviderStateMixin {
   late List<AnimationController> _heartControllers;
   late List<Animation<double>> _heartAnimations;
-  late Color _loveColor;
+  late Color _gradientStart;
+  late Color _gradientEnd;
+
+  // Gradient definitions matching effects_picker_modal - same color getting darker
+  static const Map<int, Map<String, Color>> loveGradients = {
+    0xFF000001: {'start': Color(0xFFFF69B4), 'end': Color(0xFFFF1493)}, // Hot Pink to Deep Pink
+    0xFF000002: {'start': Color(0xFFDA70D6), 'end': Color(0xFFBA55D3)}, // Orchid to Medium Orchid
+    0xFF000003: {'start': Color(0xFF57DEDB), 'end': Color(0xFF20B2AA)}, // Turquoise to Light Sea Green
+    0xFF000004: {'start': Color(0xFFFEB202), 'end': Color(0xFFFFA500)}, // Yellow to Orange
+  };
 
   @override
   void initState() {
     super.initState();
 
-    // Get color from metadata, or use default pink if not specified
+    // Get gradient from metadata, or use default pink-red gradient
     if (widget.message.metadata != null &&
         widget.message.metadata!['loveColor'] != null) {
-      _loveColor = Color(widget.message.metadata!['loveColor'] as int);
+      final gradientId = widget.message.metadata!['loveColor'] as int;
+      final gradient = loveGradients[gradientId];
+      if (gradient != null) {
+        _gradientStart = gradient['start']!;
+        _gradientEnd = gradient['end']!;
+      } else {
+        // Fallback
+        _gradientStart = const Color(0xFFFF69B4);
+        _gradientEnd = const Color(0xFFFF1493);
+      }
     } else {
-      // Fallback to hot pink if no color in metadata
-      _loveColor = const Color(0xFFFF69B4);
+      // Fallback to hot pink to deep pink gradient
+      _gradientStart = const Color(0xFFFF69B4);
+      _gradientEnd = const Color(0xFFFF1493);
     }
 
     // Create 5 animated hearts with different durations
@@ -5103,12 +5086,12 @@ class _LoveMessageWidgetState extends State<_LoveMessageWidget>
 
   @override
   Widget build(BuildContext context) {
-    return IntrinsicWidth(
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          // The actual message bubble
-          Container(
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // The actual message bubble - rendered first (bottom layer)
+        IntrinsicWidth(
+          child: Container(
             padding: const EdgeInsets.symmetric(
               horizontal: 12,
               vertical: 8,
@@ -5118,7 +5101,14 @@ class _LoveMessageWidgetState extends State<_LoveMessageWidget>
               maxWidth: MediaQuery.of(context).size.width * 0.75,
             ),
             decoration: BoxDecoration(
-              color: _loveColor, // Same color as hearts
+              gradient: LinearGradient(
+                colors: [
+                  _gradientStart.withValues(alpha: 0.85),
+                  _gradientEnd.withValues(alpha: 0.85),
+                ],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
               borderRadius: BorderRadius.circular(18),
             ),
             child: Text(
@@ -5130,20 +5120,17 @@ class _LoveMessageWidgetState extends State<_LoveMessageWidget>
               ),
             ),
           ),
+        ),
 
-          // Floating hearts around the message (bigger, closer)
-          // Top left heart (rendered first, behind left middle)
+        // Hearts rendered last (top layer) with explicit ordering
+        ...[
           _buildFloatingHeart(0, -8, -6, 18, 0.1),
-          // Left middle heart (bigger, in front)
           _buildFloatingHeart(2, -10, null, 22, -0.2, bottom: -8),
-          // Top right heart (moved more to left)
           _buildFloatingHeart(1, null, -4, 14, 0.3, right: 0),
-          // Right bottom heart
           _buildFloatingHeart(3, null, null, 12, 0.15, right: -8, bottom: -6),
-          // Left side heart
           _buildFloatingHeart(4, -6, 12, 15, -0.25),
         ],
-      ),
+      ],
     );
   }
 
@@ -5167,14 +5154,12 @@ class _LoveMessageWidgetState extends State<_LoveMessageWidget>
           child: Transform.rotate(
             angle: rotation,
             child: ShaderMask(
+              blendMode: BlendMode.srcIn,
               shaderCallback: (bounds) {
                 return LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    _loveColor,
-                    _loveColor.withValues(alpha: 0.6),
-                  ],
+                  colors: [_gradientStart, _gradientEnd],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
                 ).createShader(bounds);
               },
               child: Icon(

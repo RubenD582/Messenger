@@ -678,17 +678,7 @@ class _SearchPageState extends State<SearchPage> with TickerProviderStateMixin {
 
         Expanded(
           child: _searchController.text.isEmpty
-              ? (_recentSearches.isEmpty
-                  ? Center(
-                      child: Text(
-                        'Search for friends',
-                        style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 14,
-                        ),
-                      ),
-                    )
-                  : ListView.builder(
+              ? (ListView.builder(
                       itemCount: _recentSearches.length,
                       padding: const EdgeInsets.only(bottom: 20),
                       itemBuilder: (context, index) {

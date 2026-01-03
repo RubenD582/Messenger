@@ -28,12 +28,28 @@ class _EffectsPickerModalState extends State<EffectsPickerModal> {
     Color(0xFFFE7100), // Orange
   ];
 
-  // Available love colors (pink shades)
-  static const List<Color> loveColors = [
-    Color(0xFFFF69B4), // Hot pink
-    Color(0xFFFFB6C1), // Light pink
-    Color(0xFFFF1493), // Deep pink
-    Color(0xFFFFC0CB), // Pink
+  // Available love gradient combinations - same color getting darker
+  static const List<Map<String, dynamic>> loveGradients = [
+    {
+      'start': Color(0xFFFF69B4), // Hot Pink
+      'end': Color(0xFFFF1493),   // Deep Pink (lighter)
+      'id': 0xFF000001,
+    },
+    {
+      'start': Color(0xFFDA70D6), // Orchid
+      'end': Color(0xFFBA55D3),   // Medium Orchid (lighter)
+      'id': 0xFF000002,
+    },
+    {
+      'start': Color(0xFF57DEDB), // Turquoise
+      'end': Color(0xFF20B2AA),   // Light Sea Green (lighter)
+      'id': 0xFF000003,
+    },
+    {
+      'start': Color(0xFFFEB202), // Yellow
+      'end': Color(0xFFFFA500),   // Orange (lighter)
+      'id': 0xFF000004,
+    },
   ];
 
   @override
@@ -136,22 +152,23 @@ class _EffectsPickerModalState extends State<EffectsPickerModal> {
                                     });
                                   },
                                 child: Container(
-                                  width: 75,
+                                  width: 90,
                                   margin: const EdgeInsets.only(right: 12),
                                   child: Column(
                                     children: [
                                       // Gift preview - EXACT same as actual gift message
                                       SizedBox(
-                                        width: 75,
+                                        width: 90,
                                         child: Stack(
                                           clipBehavior: Clip.none,
                                           children: [
                                             // The actual message bubble (base)
                                             Container(
                                               padding: const EdgeInsets.symmetric(
-                                                horizontal: 10,
+                                                horizontal: 12,
                                                 vertical: 6,
                                               ),
+                                              alignment: Alignment.center,
                                               decoration: BoxDecoration(
                                                 color: color,
                                                 borderRadius: BorderRadius.circular(18),
@@ -160,7 +177,7 @@ class _EffectsPickerModalState extends State<EffectsPickerModal> {
                                                 'Gift',
                                                 style: TextStyle(
                                                   color: Colors.white,
-                                                  fontSize: 13,
+                                                  fontSize: 15,
                                                   height: 1.4,
                                                 ),
                                               ),
@@ -250,7 +267,6 @@ class _EffectsPickerModalState extends State<EffectsPickerModal> {
 
                         // Love Section
                         if (_showLoveSection) ...[
-                          const SizedBox(height: 24),
 
                           // Section title
                           Padding(
@@ -267,68 +283,84 @@ class _EffectsPickerModalState extends State<EffectsPickerModal> {
 
                           const SizedBox(height: 12),
 
-                          // Horizontal scrollable love color picker
+                          // Horizontal scrollable love gradient picker
                           SizedBox(
                             height: 80,
                             child: ListView.builder(
                               scrollDirection: Axis.horizontal,
                               padding: const EdgeInsets.symmetric(horizontal: 16),
-                              itemCount: loveColors.length,
+                              itemCount: loveGradients.length,
                               itemBuilder: (context, index) {
-                                final color = loveColors[index];
-                                final isSelected = _selectedEffect == 'love' && _selectedColor == color;
+                                final gradient = loveGradients[index];
+                                final gradientId = Color(gradient['id'] as int);
+                                final isSelected = _selectedEffect == 'love' && _selectedColor == gradientId;
 
                                 return GestureDetector(
                                   onTap: () {
                                     setState(() {
                                       _selectedEffect = 'love';
-                                      _selectedColor = color;
+                                      _selectedColor = gradientId;
                                     });
                                   },
                                   child: Container(
-                                    width: 75,
-                                    margin: const EdgeInsets.only(right: 12),
+                                    width: 90,
+                                    margin: const EdgeInsets.only(right: 24, top: 5),
                                     child: Column(
                                       children: [
-                                        // Love preview with floating hearts
-                                        SizedBox(
-                                          width: 75,
-                                          height: 50,
-                                          child: Stack(
-                                            clipBehavior: Clip.none,
-                                            children: [
-                                              // Base message bubble
-                                              Center(
+                                        // Love preview with floating hearts - EXACT same as chat
+                                        Stack(
+                                          clipBehavior: Clip.none,
+                                          children: [
+                                            // Base message bubble
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 12,
+                                                vertical: 6,
+                                              ),
+                                              constraints: BoxConstraints(
+                                                minWidth: 70,
+                                              ),
+                                              alignment: Alignment.center,
+                                              decoration: BoxDecoration(
+                                                gradient: LinearGradient(
+                                                  colors: [
+                                                    (gradient['start'] as Color).withValues(alpha: 0.85),
+                                                    (gradient['end'] as Color).withValues(alpha: 0.85),
+                                                  ],
+                                                  begin: Alignment.topCenter,
+                                                  end: Alignment.bottomCenter,
+                                                ),
+                                                borderRadius: BorderRadius.circular(18),
+                                              ),
+                                              child: Text(
+                                                'Love',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 15,
+                                                  height: 1.4,
+                                                ),
+                                              ),
+                                            ),
+                                            // Selection border overlay (doesn't affect height)
+                                            if (isSelected)
+                                              Positioned.fill(
                                                 child: Container(
-                                                  padding: const EdgeInsets.symmetric(
-                                                    horizontal: 10,
-                                                    vertical: 6,
-                                                  ),
                                                   decoration: BoxDecoration(
-                                                    color: const Color(0xFF2C2C2E),
                                                     borderRadius: BorderRadius.circular(18),
-                                                    border: isSelected ? Border.all(
+                                                    border: Border.all(
                                                       color: Colors.white,
                                                       width: 2,
-                                                    ) : null,
-                                                  ),
-                                                  child: Text(
-                                                    'Love',
-                                                    style: TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: 13,
-                                                      height: 1.4,
                                                     ),
                                                   ),
                                                 ),
                                               ),
-                                              // Small hearts around
-                                              _buildPreviewHeart(color, 8, -5, -5, 0.1),
-                                              _buildPreviewHeart(color, 6, 55, -3, 0.3),
-                                              _buildPreviewHeart(color, 7, 10, 35, -0.2),
-                                              _buildPreviewHeart(color, 5, 60, 38, 0.4),
-                                            ],
-                                          ),
+                                            // Hearts with EXACT same positioning as chat
+                                            _buildPreviewHeart(gradient, 18, -8, -6, null, null, 0.1),
+                                            _buildPreviewHeart(gradient, 22, -10, null, null, -8, -0.2),
+                                            _buildPreviewHeart(gradient, 14, null, -4, 0, null, 0.3),
+                                            _buildPreviewHeart(gradient, 12, null, null, -8, -6, 0.15),
+                                            _buildPreviewHeart(gradient, 15, -6, 12, null, null, -0.25),
+                                          ],
                                         ),
 
                                         const SizedBox(height: 4),
@@ -414,30 +446,36 @@ class _EffectsPickerModalState extends State<EffectsPickerModal> {
     );
   }
 
-  // Helper to build preview hearts
-  Widget _buildPreviewHeart(Color color, double size, double left, double top, double rotation) {
+  // Helper to build preview hearts - EXACT same as chat
+  Widget _buildPreviewHeart(
+    Map<String, dynamic> gradient,
+    double size,
+    double? left,
+    double? top,
+    double? right,
+    double? bottom,
+    double rotation,
+  ) {
     return Positioned(
       left: left,
       top: top,
+      right: right,
+      bottom: bottom,
       child: Transform.rotate(
         angle: rotation,
-        child: Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                color.withValues(alpha: 0.8),
-                color.withValues(alpha: 0.3),
-              ],
-            ),
-          ),
+        child: ShaderMask(
+          blendMode: BlendMode.srcIn,
+          shaderCallback: (bounds) {
+            return LinearGradient(
+              colors: [gradient['start'] as Color, gradient['end'] as Color],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ).createShader(bounds);
+          },
           child: Icon(
             CupertinoIcons.heart_fill,
             size: size,
-            color: color,
+            color: Colors.white,
           ),
         ),
       ),
