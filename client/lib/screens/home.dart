@@ -902,15 +902,26 @@ class _HomeState extends State<Home> {
           } else {
             // Friend status circle
             final friendStatuses = uniqueFriendStatuses[index - 1];
+            final storyKey = GlobalKey(); // Add a GlobalKey here
             return Padding(
               padding: const EdgeInsets.only(right: 6),
               child: GestureDetector(
+                key: storyKey, // Assign the key to the GestureDetector
                 onTap: () {
-                  // View friend statuses
+                  // Get the position of the status circle
+                  final RenderBox? renderBox = storyKey.currentContext?.findRenderObject() as RenderBox?;
+                  if (renderBox == null) return;
+
+                  final offset = renderBox.localToGlobal(Offset.zero);
+                  final circleCenter = offset + Offset(renderBox.size.width / 2, renderBox.size.height / 2);
+
+                  // View friend statuses with CircularRevealPageRoute
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
+                    CircularRevealPageRoute(
                       builder: (context) => StatusViewerScreen(statuses: friendStatuses),
+                      originOffset: circleCenter,
+                      originRadius: 32.0, // Status circle radius
                     ),
                   );
                 },

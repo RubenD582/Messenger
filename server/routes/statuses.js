@@ -96,8 +96,9 @@ router.get("/friends", authenticateToken, async (req, res) => {
         OR (f.friend_id = $1 AND f.user_id = s.user_id)
       )
       WHERE f.status = 'accepted'
+      AND s.user_id != $1
       AND s.created_at > NOW() - INTERVAL '24 hours'
-      ORDER BY s.created_at DESC
+      ORDER BY s.created_at ASC
     `, [userId]);
 
     const statuses = result.rows.map(row => ({

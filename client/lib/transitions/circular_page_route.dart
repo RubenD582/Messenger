@@ -36,11 +36,11 @@ class CircularRevealPageRoute<T> extends PageRoute<T> {
       reverseCurve: Curves.easeInCubic, // Smooth reverse animation
     );
 
-    // Faster fade animation - completes in first 50% of the transition
+    // Faster fade animation
     final fadeAnimation = CurvedAnimation(
       parent: animation,
-      curve: const Interval(0.0, 0.5, curve: Curves.easeOut),
-      reverseCurve: const Interval(0.5, 1.0, curve: Curves.easeIn),
+      curve: const Interval(0.0, 0.4, curve: Curves.easeOut),
+      reverseCurve: const Interval(0.0, 0.4, curve: Curves.easeIn),
     );
 
     return FadeTransition(
@@ -75,10 +75,10 @@ class CircularRevealPageRoute<T> extends PageRoute<T> {
   }
 
   @override
-  Duration get transitionDuration => const Duration(milliseconds: 400);
+  Duration get transitionDuration => const Duration(milliseconds: 250);
 
   @override
-  Duration get reverseTransitionDuration => const Duration(milliseconds: 200);
+  Duration get reverseTransitionDuration => const Duration(milliseconds: 250);
 
   @override
   bool get opaque => true;
