@@ -20,6 +20,8 @@ class ApiService {
   final StreamController<Map<String, dynamic>> _typingIndicatorController = StreamController<Map<String, dynamic>>.broadcast();
   final StreamController<Map<String, dynamic>> _readReceiptController = StreamController<Map<String, dynamic>>.broadcast();
   final StreamController<Map<String, dynamic>> _positionUpdateController = StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<Map<String, dynamic>> _statusCreatedController = StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<Map<String, dynamic>> _statusDeletedController = StreamController<Map<String, dynamic>>.broadcast();
 
   // Callback for when WebSocket reconnects
   Function()? onReconnected;
@@ -41,6 +43,8 @@ class ApiService {
   Stream<Map<String, dynamic>> get typingIndicatorStream => _typingIndicatorController.stream;
   Stream<Map<String, dynamic>> get readReceiptStream => _readReceiptController.stream;
   Stream<Map<String, dynamic>> get positionUpdateStream => _positionUpdateController.stream;
+  Stream<Map<String, dynamic>> get statusCreatedStream => _statusCreatedController.stream;
+  Stream<Map<String, dynamic>> get statusDeletedStream => _statusDeletedController.stream;
   
   void connectWebSocket(String? uuid) async {
     _socket = IO.io(baseUrl, <String, dynamic>{
@@ -160,6 +164,21 @@ class ApiService {
         // Add the updated count to the StreamController
         _pendingFriendRequestsController.add(friendRequestCount);
       }
+    });
+
+    // Listen for status events
+    _socket!.on("statusCreated", (data) {
+      if (kDebugMode) {
+        print('WebSocket: Status created - ${data['userName']}');
+      }
+      _statusCreatedController.add(Map<String, dynamic>.from(data));
+    });
+
+    _socket!.on("statusDeleted", (data) {
+      if (kDebugMode) {
+        print('WebSocket: Status deleted - ${data['id']}');
+      }
+      _statusDeletedController.add(Map<String, dynamic>.from(data));
     });
 
     _socket!.onReconnect((data) {
@@ -552,5 +571,137 @@ class ApiService {
     _typingIndicatorController.close();
     _readReceiptController.close();
     _positionUpdateController.close();
+    _statusCreatedController.close();
+    _statusDeletedController.close();
+  }
+
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+  //
+  // STATUS API METHODS
+  //
+  //////////////////////////////////////////////////////////////////////////////////////////////////
+
+  // Get current user's active statuses (up to 20)
+  Future<List<Map<String, dynamic>>> getMyStatuses() async {
+    final String apiUrl = '$baseUrl/statuses/me';
+    final token = await AuthService.getToken();
+
+    try {
+      final response = await http.get(
+        Uri.parse(apiUrl),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return List<Map<String, dynamic>>.from(data['statuses']);
+      } else {
+        throw Exception('Failed to fetch user statuses: ${response.statusCode}');
+      }
+    } catch (error) {
+      if (kDebugMode) {
+        print('Error fetching user statuses: $error');
+      }
+      rethrow;
+    }
+  }
+
+  // Get statuses from friends (active within 24 hours)
+  Future<List<Map<String, dynamic>>> getFriendStatuses() async {
+    final String apiUrl = '$baseUrl/statuses/friends';
+    final token = await AuthService.getToken();
+
+    try {
+      final response = await http.get(
+        Uri.parse(apiUrl),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return List<Map<String, dynamic>>.from(data['statuses']);
+      } else if (response.statusCode == 404) {
+        return [];
+      } else {
+        throw Exception('Failed to fetch friend statuses: ${response.statusCode}');
+      }
+    } catch (error) {
+      if (kDebugMode) {
+        print('Error fetching friend statuses: $error');
+      }
+      rethrow;
+    }
+  }
+
+  // Create a new status
+  Future<Map<String, dynamic>> createStatus(String textContent, String backgroundColor) async {
+    final String apiUrl = '$baseUrl/statuses';
+    final token = await AuthService.getToken();
+
+    try {
+      final response = await http.post(
+        Uri.parse(apiUrl),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: json.encode({
+          'textContent': textContent,
+          'backgroundColor': backgroundColor,
+        }),
+      );
+
+      if (response.statusCode == 201) {
+        final data = json.decode(response.body);
+        if (kDebugMode) {
+          print('Status created successfully: ${data['id']}');
+        }
+        return data;
+      } else {
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['message'] ?? 'Failed to create status');
+      }
+    } catch (error) {
+      if (kDebugMode) {
+        print('Error creating status: $error');
+      }
+      rethrow;
+    }
+  }
+
+  // Delete a status
+  Future<void> deleteStatus(String statusId) async {
+    final String apiUrl = '$baseUrl/statuses/$statusId';
+    final token = await AuthService.getToken();
+
+    try {
+      final response = await http.delete(
+        Uri.parse(apiUrl),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        if (kDebugMode) {
+          print('Status deleted successfully');
+        }
+      } else {
+        final errorData = json.decode(response.body);
+        throw Exception(errorData['message'] ?? 'Failed to delete status');
+      }
+    } catch (error) {
+      if (kDebugMode) {
+        print('Error deleting status: $error');
+      }
+      rethrow;
+    }
   }
 }

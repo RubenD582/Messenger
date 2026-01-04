@@ -11,7 +11,9 @@ const authRoutes = require("./routes/authentication");
 const chatSocket = require("./sockets/chatSocket");
 const friendRoutes = require("./routes/friends");
 const messageRoutes = require("./routes/messages");
+const statusRoutes = require("./routes/statuses"); // Import status routes
 const friendSocket = require("./sockets/friendSocket"); // Import the new friend socket
+const statusSocket = require("./sockets/statusSocket"); // Import status socket
 const webhookRoutes = require("./routes/webhooks"); // Import webhook routes for Clerk
 const suggestionsRoutes = require('./routes/suggestions'); // Import suggestions route
 const db = require("./db");
@@ -52,6 +54,7 @@ app.use(cookieParser());
 app.use("/auth", authRoutes);
 app.use("/friends", friendRoutes);
 app.use("/messages", messageRoutes);
+app.use("/statuses", statusRoutes); // Use status routes
 app.use("/suggestions", suggestionsRoutes); // Use suggestions route
 
 // Serve static files from the Flutter web build directory
@@ -65,6 +68,7 @@ app.get('*', (req, res) => {
 // Initialize WebSockets
 chatSocket(io);
 friendSocket(io);
+statusSocket(io);
 
 const graphService = require('./services/graphService'); // Import graphService
 

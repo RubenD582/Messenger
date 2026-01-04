@@ -3,6 +3,10 @@ import 'dart:ui';
 
 import 'package:client/screens/requests.dart';
 import 'package:client/screens/chat_screen.dart';
+import 'package:client/screens/status_creation_screen.dart';
+import 'package:client/screens/status_viewer_screen.dart';
+import 'package:client/models/status.dart';
+import 'package:client/transitions/circular_page_route.dart';
 import 'discover.dart' as discover;
 import 'package:client/services/api_service.dart';
 import 'package:client/services/auth_service.dart';
@@ -12,7 +16,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_sticky_header/flutter_sticky_header.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:hive/hive.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 
@@ -40,6 +43,12 @@ class _HomeState extends State<Home> {
   late StreamSubscription<int> _pendingFriendRequestsSubscription;
   int _pendingFriendRequestsCount = 0;
 
+  // Status state
+  List<Status> _myStatuses = [];
+  List<Status> _friendStatuses = [];
+  late StreamSubscription<Map<String, dynamic>> _statusCreatedSubscription;
+  late StreamSubscription<Map<String, dynamic>> _statusDeletedSubscription;
+
   late String uuid;
   final LocationService _locationService = LocationService();
 
@@ -54,6 +63,12 @@ class _HomeState extends State<Home> {
       _openFriendsBox().then((_) {
         fetchFriends();
       });
+
+      // Load statuses
+      _loadStatuses();
+
+      // Setup status WebSocket listeners
+      _setupStatusListeners();
 
       // Update location on app launch/login
       _updateLocationOnLaunch();
@@ -224,10 +239,63 @@ class _HomeState extends State<Home> {
     if (userUuid != null) {
       return userUuid;
     }
-    
+
     return null;
   }
-  
+
+  Future<void> _loadStatuses() async {
+    try {
+      // Load user's own statuses (up to 20)
+      final myStatusesData = await apiService.getMyStatuses();
+      _myStatuses = myStatusesData.map((data) => Status.fromJson(data)).toList();
+
+      // Load friend statuses
+      final friendStatusesData = await apiService.getFriendStatuses();
+      _friendStatuses = friendStatusesData.map((data) => Status.fromJson(data)).toList();
+
+      setState(() {});
+    } catch (error) {
+      if (kDebugMode) {
+        print('Error loading statuses: $error');
+      }
+    }
+  }
+
+  void _setupStatusListeners() {
+    // Listen for new statuses
+    _statusCreatedSubscription = apiService.statusCreatedStream.listen((data) {
+      if (kDebugMode) {
+        print('Status created event received: $data');
+      }
+      _loadStatuses(); // Refresh statuses
+    });
+
+    // Listen for deleted statuses
+    _statusDeletedSubscription = apiService.statusDeletedStream.listen((data) {
+      if (kDebugMode) {
+        print('Status deleted event received: $data');
+      }
+      _loadStatuses(); // Refresh statuses
+    });
+  }
+
+  void _openStatusCreationScreen(GlobalKey statusCircleKey) {
+    // Get the position of the status circle
+    final RenderBox? renderBox = statusCircleKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    final offset = renderBox.localToGlobal(Offset.zero);
+    final circleCenter = offset + Offset(renderBox.size.width / 2, renderBox.size.height / 2);
+
+    Navigator.of(context).push(
+      CircularRevealPageRoute(
+        builder: (context) => StatusCreationScreen(apiService: apiService),
+        originOffset: circleCenter,
+        originRadius: 32.0, // Status circle radius
+      ),
+    );
+  }
+
   void _showSearchModal() {
     Navigator.push(
       context,
@@ -239,6 +307,8 @@ class _HomeState extends State<Home> {
   @override
   void dispose() {
     _pendingFriendRequestsSubscription.cancel();
+    _statusCreatedSubscription.cancel();
+    _statusDeletedSubscription.cancel();
     apiService.disconnectWebSocket();
 
     _scrollController.dispose();
@@ -294,14 +364,17 @@ class _HomeState extends State<Home> {
                               children: [
                                 Align(
                                   // alignment: Alignment(0.0, textAlignment),  // Center the text on scroll
-                                  child: Text(
-                                    "Messages",
-                                    textAlign: TextAlign.left,
-                                    style: GoogleFonts.inter(
-                                      color: Colors.white,
-                                      fontSize: textSize,  // Animate the text size
-                                      fontWeight: FontWeight.w600,
-                                      letterSpacing: -0.5,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(bottom: 0),
+                                    child: Text(
+                                      "Messages",
+                                      textAlign: TextAlign.left,
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: textSize,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: -0.5,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -309,7 +382,7 @@ class _HomeState extends State<Home> {
                                   children: [
                                     _iconButton(Icons.more_horiz, Colors.white.withAlpha(50), _showSearchModal),
                                     const SizedBox(width: 10),
-                                    _iconButton(Icons.add, Color.fromARGB(255, 0, 122, 255), _showSearchModal),
+                                    _iconButton(Icons.add, Color(0xFF5856D6), _showSearchModal),
                                   ],
                                 ),
                               ],
@@ -327,7 +400,7 @@ class _HomeState extends State<Home> {
           // **Sticky Search Header**
           SliverStickyHeader(
             header: Container(
-              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               color: Colors.black,
               child: Transform.translate(
                 offset: Offset(
@@ -348,10 +421,10 @@ class _HomeState extends State<Home> {
                     fontSize: 16,
                     fontWeight: FontWeight.w400,
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 12),
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                   backgroundColor: AppColors.surfaceVariant,
                   itemColor: Colors.white,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                   onChanged: (value) {},
                   onSubmitted: (value) {},
                   prefixIcon: Padding(
@@ -373,7 +446,7 @@ class _HomeState extends State<Home> {
                 _scrollYOffset * 0.75
               ),
                 child: Container(
-                  padding: EdgeInsets.only(left: 10, right: 10, top: 2, bottom: 20),
+                  padding: EdgeInsets.only(left: 10, right: 10, top: 8, bottom: 8),
                   child: AnimatedOpacity(
                     opacity: 1 - _scrollYOpacity,
                     duration: Duration(milliseconds: 200),
@@ -409,11 +482,24 @@ class _HomeState extends State<Home> {
             ),
           ),
       
+          // **Stories Bar (UI Mockup)**
+          if (selectedChip == "All")
+            SliverToBoxAdapter(
+              child: Transform.translate(
+                offset: Offset(0, _scrollYOffset * 0.5),
+                child: _buildStoriesBar(),
+              ),
+            ),
+
+          const SliverToBoxAdapter(
+            child: SizedBox(height: 10),
+          ),
+
           // **Friend List / Requests**
-          SliverFillRemaining(
+          SliverToBoxAdapter(
             child: Transform.translate(
               offset: Offset(
-                0, 
+                0,
                 _scrollYOffset
               ),
               child: Container(
@@ -445,110 +531,237 @@ class _HomeState extends State<Home> {
 
 
   Widget friendList() {
+    // Empty state
+    if (_friends.isEmpty && !isLoading) {
+      return _buildEmptyState();
+    }
+
     return RefreshIndicator(
       backgroundColor: Colors.transparent,
       color: Colors.white,
       onRefresh: _refreshContent,
       child: ListView.builder(
-        padding: EdgeInsets.only(top: 0),
+        padding: EdgeInsets.zero,
         shrinkWrap: true,
         physics: NeverScrollableScrollPhysics(),
         itemCount: _friends.length,
         itemBuilder: (context, index) {
           var user = _friends[index];
           String profilePicture = 'assets/noprofile.png';
-      
+
+          // Mock data for demo (replace with real data from backend)
+          final bool isOnline = index % 3 == 0; // Mock: every 3rd user is online
+          final bool isTyping = index == 0; // Mock: first user is typing
+          final int unreadCount = index % 5 == 0 ? (index % 10) + 1 : 0; // Mock unread count
+          final String lastMessage = isTyping
+              ? ''
+              : index % 4 == 0
+                  ? 'Hey! How are you doing? 😊'
+                  : index % 4 == 1
+                      ? 'See you tomorrow!'
+                      : index % 4 == 2
+                          ? 'Thanks for the help!'
+                          : 'Sounds good!';
+          final String timestamp = index % 6 == 0
+              ? 'Just now'
+              : index % 6 == 1
+                  ? '2m ago'
+                  : index % 6 == 2
+                      ? '1h ago'
+                      : index % 6 == 3
+                          ? 'Yesterday'
+                          : index % 6 == 4
+                              ? 'Tuesday'
+                              : 'Monday';
+
           return Dismissible(
-            key: Key(user['id'].toString()), // Unique key for each item
-            direction: DismissDirection.horizontal, // Allow swiping in both directions
+            key: Key(user['id'].toString()),
+            direction: DismissDirection.horizontal,
             onDismissed: (direction) {
               if (direction == DismissDirection.endToStart) {
                 // Delete action
-                // deleteRequest(user['id']);
               } else if (direction == DismissDirection.startToEnd) {
                 // Pin action
-                // pinUser(user['id']);
               }
             },
-      
-            /// **Left Swipe (Delete)**
             background: Container(
-              color: Colors.blue, // Pin action background
+              color: Color(0xFF5856D6),
               alignment: Alignment.centerLeft,
               padding: EdgeInsets.only(left: 20),
-              child: Icon(
-                Icons.push_pin, // Pin icon
-                color: Colors.white,
-              ),
+              child: Icon(Icons.push_pin, color: Colors.white, size: 24),
             ),
-      
-            /// **Right Swipe (Pin)**
             secondaryBackground: Container(
-              color: Colors.red, // Delete action background
+              color: Color(0xFFFF3B30),
               alignment: Alignment.centerRight,
               padding: EdgeInsets.only(right: 20),
-              child: Icon(
-                Icons.delete, // Trash icon
-                color: Colors.white,
-              ),
+              child: Icon(Icons.delete, color: Colors.white, size: 24),
             ),
-      
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              child: ListTile(
-                contentPadding: EdgeInsets.all(0),
-                leading: CircleAvatar(
-                  radius: 24,
-                  backgroundImage: AssetImage(profilePicture),
-                ),
-                onTap: () {
-                  final conversationId = _getConversationId(uuid, user['friend_id']);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ChatScreen(
-                        conversationId: conversationId,
-                        friendId: user['friend_id'],
-                        friendName: '${user['first_name']} ${user['last_name']}',
-                        apiService: apiService,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: InkWell(
+                  onTap: () {
+                    final conversationId = _getConversationId(uuid, user['friend_id']);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ChatScreen(
+                          conversationId: conversationId,
+                          friendId: user['friend_id'],
+                          friendName: '${user['first_name']} ${user['last_name']}',
+                          apiService: apiService,
+                        ),
                       ),
-                    ),
-                  );
-                },
-                title: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  mainAxisSize: MainAxisSize.max,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          '${user['first_name']} ${user['last_name']}',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16,
-                            letterSpacing: -0.3,
+                    );
+                  },
+                  child: Row(
+                    children: [
+                      // Profile picture with online status
+                      Stack(
+                        children: [
+                          CircleAvatar(
+                            radius: 24,
+                            backgroundImage: AssetImage(profilePicture),
                           ),
+                          if (isOnline)
+                            Positioned(
+                              right: 0,
+                              bottom: 0,
+                              child: Container(
+                                width: 16,
+                                height: 16,
+                                decoration: BoxDecoration(
+                                  color: Color(0xFF30D158),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.black, width: 2.5),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      SizedBox(width: 12),
+                      // Message info
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  '${user['first_name']} ${user['last_name']}',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: unreadCount > 0 ? FontWeight.w700 : FontWeight.w600,
+                                    fontSize: 16,
+                                    letterSpacing: -0.3,
+                                  ),
+                                ),
+                                Text(
+                                  timestamp,
+                                  style: TextStyle(
+                                    color: unreadCount > 0
+                                        ? Color(0xFF5856D6)
+                                        : Color(0xFF76767B),
+                                    fontSize: 13,
+                                    fontWeight: unreadCount > 0 ? FontWeight.w600 : FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            SizedBox(height: 2),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: isTyping
+                                      ? Row(
+                                          children: [
+                                            Text(
+                                              'Typing...',
+                                              style: TextStyle(
+                                                color: Color(0xFF30D158),
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                            ),
+                                            SizedBox(width: 4),
+                                          ],
+                                        )
+                                      : Text(
+                                          lastMessage,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: unreadCount > 0
+                                                ? Color(0xFFD1D1D6)
+                                                : Color(0xFF76767B),
+                                            fontSize: 14,
+                                            fontWeight: unreadCount > 0 ? FontWeight.w500 : FontWeight.w400,
+                                          ),
+                                        ),
+                                ),
+                                if (unreadCount > 0) ...[
+                                  SizedBox(width: 8),
+                                  Container(
+                                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Color(0xFF5856D6),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    constraints: BoxConstraints(minWidth: 20),
+                                    child: Text(
+                                      unreadCount > 9 ? '9+' : unreadCount.toString(),
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
                         ),
-                        Text(
-                          'Tap to send a message',
-                          style: TextStyle(
-                            color: Color(0xFF76767B),
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                            letterSpacing: -0.3,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            CupertinoIcons.chat_bubble_2,
+            size: 80,
+            color: Colors.white.withValues(alpha: 0.3),
+          ),
+          SizedBox(height: 16),
+          Text(
+            'No messages yet',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.6),
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'Tap + to start chatting with friends',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.4),
+              fontSize: 14,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -558,6 +771,184 @@ class _HomeState extends State<Home> {
   String _getConversationId(String userId1, String userId2) {
     final sorted = [userId1, userId2]..sort();
     return '${sorted[0]}_${sorted[1]}';
+  }
+
+  // Stories Bar (UI Mockup - no functionality)
+  Widget _buildStoriesBar() {
+    // Build list with "Your Story" first, then friend statuses
+    final hasMyStatus = _myStatuses.isNotEmpty && !_myStatuses.last.isExpired;
+
+    // Group friend statuses by userId to avoid duplicates
+    final Map<String, List<Status>> groupedStatuses = {};
+    for (var status in _friendStatuses) {
+      if (!groupedStatuses.containsKey(status.userId)) {
+        groupedStatuses[status.userId] = [];
+      }
+      groupedStatuses[status.userId]!.add(status);
+    }
+
+    final uniqueFriendStatuses = groupedStatuses.values.toList();
+
+    return Container(
+      height: 80,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        itemCount: 1 + uniqueFriendStatuses.length, // "Your Story" + unique friends
+        itemBuilder: (context, index) {
+          final isYou = index == 0;
+
+          if (isYou) {
+            // "Your Story" circle
+            final yourStoryKey = GlobalKey();
+            return Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: GestureDetector(
+                onTap: () {
+                  if (hasMyStatus) {
+                    // Show action sheet to view or create
+                    showCupertinoModalPopup(
+                      context: context,
+                      builder: (BuildContext context) => CupertinoActionSheet(
+                        actions: [
+                          CupertinoActionSheetAction(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => StatusViewerScreen(statuses: _myStatuses),
+                                ),
+                              );
+                            },
+                            child: const Text('View Status'),
+                          ),
+                          CupertinoActionSheetAction(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              _openStatusCreationScreen(yourStoryKey);
+                            },
+                            child: const Text('Create New Status'),
+                          ),
+                        ],
+                        cancelButton: CupertinoActionSheetAction(
+                          onPressed: () {
+                            Navigator.pop(context);
+                          },
+                          isDefaultAction: true,
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                    );
+                  } else {
+                    // No statuses, directly create
+                    _openStatusCreationScreen(yourStoryKey);
+                  }
+                },
+                child: Column(
+                  key: yourStoryKey,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Stack(
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: hasMyStatus
+                                ? const LinearGradient(
+                                    colors: [Color(0xFF8B7FE8), Color(0xFF5856D6)],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  )
+                                : null,
+                            color: hasMyStatus ? null : const Color(0xFF1C1C1E),
+                          ),
+                          padding: const EdgeInsets.all(2.5),
+                          child: Container(
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.black,
+                            ),
+                            padding: const EdgeInsets.all(2.5),
+                            child: const CircleAvatar(
+                              radius: 26,
+                              backgroundImage: AssetImage('assets/noprofile.png'),
+                            ),
+                          ),
+                        ),
+                        // Always show + icon
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: Container(
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF007AFF),
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.black, width: 2),
+                            ),
+                            child: const Icon(Icons.add, size: 12, color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          } else {
+            // Friend status circle
+            final friendStatuses = uniqueFriendStatuses[index - 1];
+            return Padding(
+              padding: const EdgeInsets.only(right: 6),
+              child: GestureDetector(
+                onTap: () {
+                  // View friend statuses
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => StatusViewerScreen(statuses: friendStatuses),
+                    ),
+                  );
+                },
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 64,
+                      height: 64,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: LinearGradient(
+                          colors: [Color(0xFF8B7FE8), Color(0xFF5856D6)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                      padding: const EdgeInsets.all(2.5),
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.black,
+                        ),
+                        padding: const EdgeInsets.all(2.5),
+                        child: const CircleAvatar(
+                          radius: 26,
+                          backgroundImage: AssetImage('assets/noprofile.png'),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+        },
+      ),
+    );
   }
 
   // Updated chip function with single selection handling
@@ -576,7 +967,7 @@ class _HomeState extends State<Home> {
           child: Container(
             height: 32,
             decoration: BoxDecoration(
-              color: isSelected ? Color.fromARGB(255, 0, 122, 255) : Color(0xFF1C1C1E),
+              color: isSelected ? Color(0xFF5856D6) : Color(0xFF1C1C1E),
               borderRadius: const BorderRadius.all(
                 Radius.circular(100),
               ),

@@ -1086,14 +1086,28 @@ class _ChatScreenState extends State<ChatScreen> {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      if (_isTyping)
-                        Text(
-                          'typing...',
-                          style: AppTypography.caption.copyWith(
-                            color: const Color(0xFF5856D6),
-                            fontSize: 12,
-                          ),
-                        ),
+                      const SizedBox(height: 2),
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 200),
+                        transitionBuilder: (child, animation) {
+                          return FadeTransition(
+                            opacity: animation,
+                            child: SlideTransition(
+                              position: Tween<Offset>(
+                                begin: const Offset(0, -0.2),
+                                end: Offset.zero,
+                              ).animate(CurvedAnimation(
+                                parent: animation,
+                                curve: Curves.easeOut,
+                              )),
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: _isTyping
+                            ? const _AnimatedTypingText(key: ValueKey('typing'))
+                            : const SizedBox.shrink(key: ValueKey('empty')),
+                      ),
                     ],
                   ),
                 ),
@@ -1815,6 +1829,46 @@ class _ChatScreenState extends State<ChatScreen> {
                                       normalIndex++;
                                     }
                                   }
+
+                                  // Add typing indicator after last message
+                                  // if (_isTyping) {
+                                  //   items.add(
+                                  //     Padding(
+                                  //       padding: const EdgeInsets.only(
+                                  //         left: 8,
+                                  //         top: 8,
+                                  //         bottom: 4,
+                                  //       ),
+                                  //       child: Row(
+                                  //         children: [
+                                  //           // Profile picture
+                                  //           CircleAvatar(
+                                  //             radius: 14,
+                                  //             backgroundColor: AppColors.surface,
+                                  //             backgroundImage:
+                                  //                 widget.friendProfilePicture != null
+                                  //                     ? NetworkImage(widget.friendProfilePicture!)
+                                  //                     : const AssetImage('assets/noprofile.png')
+                                  //                         as ImageProvider,
+                                  //           ),
+                                  //           const SizedBox(width: 8),
+                                  //           // "Typing" text
+                                  //           Text(
+                                  //             'Typing',
+                                  //             style: TextStyle(
+                                  //               color: Colors.white.withValues(alpha: 0.65),
+                                  //               fontSize: 14,
+                                  //               fontWeight: FontWeight.w600,
+                                  //             ),
+                                  //           ),
+                                  //           const SizedBox(width: 2),
+                                  //           // Animated dots
+                                  //           const _PulsingDotsIndicator(),
+                                  //         ],
+                                  //       ),
+                                  //     ),
+                                  //   );
+                                  // }
 
                                   return items;
                                 }(),
@@ -2852,8 +2906,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                 padding: EdgeInsets.only(top: 3),
                                 icon: SvgPicture.asset(
                                   'assets/send.svg',
-                                  width: 15,
-                                  height: 15,
+                                  width: 13,
+                                  height: 13,
                                   colorFilter: const ColorFilter.mode(
                                     Colors.white,
                                     BlendMode.srcIn,
@@ -2959,12 +3013,19 @@ class _ChatScreenState extends State<ChatScreen> {
       onChanged: (text) {
         // Trigger rebuild to update send button state
         setState(() {});
+
+        // Send typing indicator
+        if (text.isNotEmpty) {
+          _chatService.sendTypingIndicator(true);
+        } else {
+          _chatService.sendTypingIndicator(false);
+        }
       },
       decoration: InputDecoration(
         hintText: 'Message...',
         hintStyle: AppTypography.body.copyWith(
           color: AppColors.textTertiary.withValues(alpha: 0.7),
-          fontWeight: FontWeight.w600,
+          fontWeight: FontWeight.w500,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(100),
@@ -5171,6 +5232,130 @@ class _LoveMessageWidgetState extends State<_LoveMessageWidget>
           ),
         );
       },
+    );
+  }
+}
+
+// Pulsing dots indicator widget
+class _PulsingDotsIndicator extends StatefulWidget {
+  const _PulsingDotsIndicator({super.key});
+
+  @override
+  State<_PulsingDotsIndicator> createState() => _PulsingDotsIndicatorState();
+}
+
+class _PulsingDotsIndicatorState extends State<_PulsingDotsIndicator> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 12,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: List.generate(3, (index) {
+          return AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              // Balanced stagger for subtle wave effect
+              final delay = (2 - index) * 0.15;
+              final animValue = (_controller.value + delay) % 1.0;
+
+              // Smoother jumping with easing
+              double jump;
+              if (animValue < 0.5) {
+                // Going up - ease out
+                final t = animValue * 2;
+                jump = Curves.easeOut.transform(t) * 3.5;
+              } else {
+                // Coming down - ease in
+                final t = (animValue - 0.5) * 2;
+                jump = (1 - Curves.easeIn.transform(t)) * 3.5;
+              }
+
+              return Container(
+                margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                child: Transform.translate(
+                  offset: Offset(0, -jump),
+                  child: Container(
+                    width: 2.5,
+                    height: 2.5,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.65),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        }),
+      ),
+    );
+  }
+}
+
+// Animated typing text that cycles through "Typing.", "Typing..", "Typing..."
+class _AnimatedTypingText extends StatefulWidget {
+  const _AnimatedTypingText({super.key});
+
+  @override
+  State<_AnimatedTypingText> createState() => _AnimatedTypingTextState();
+}
+
+class _AnimatedTypingTextState extends State<_AnimatedTypingText> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  int _dotCount = 1;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 900),
+      vsync: this,
+    )..repeat();
+
+    _controller.addListener(() {
+      final newDotCount = ((_controller.value * 3).floor() % 3) + 1;
+      if (newDotCount != _dotCount) {
+        setState(() {
+          _dotCount = newDotCount;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      'Typing${"." * _dotCount}',
+      style: const TextStyle(
+        color: Color(0xFF5856D6), // Purple color (same as send button)
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+      ),
     );
   }
 }

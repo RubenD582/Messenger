@@ -63,7 +63,7 @@ class MyApp extends StatelessWidget {
           labelMedium: AppTypography.label,
           labelSmall: AppTypography.caption,
         ),
-        fontFamily: GoogleFonts.inter().fontFamily,
+
 
         // Card theme
         cardColor: AppColors.surfaceVariant,
