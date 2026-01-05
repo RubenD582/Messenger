@@ -597,7 +597,18 @@ class ApiService {
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        return List<Map<String, dynamic>>.from(data['statuses']);
+        final statuses = List<Map<String, dynamic>>.from(data['statuses']);
+
+        if (kDebugMode) {
+          print('🌐 API returned ${statuses.length} statuses from /statuses/me');
+          for (var i = 0; i < statuses.length; i++) {
+            final text = statuses[i]['textContent'].toString();
+            final preview = text.length > 20 ? text.substring(0, 20) : text;
+            print('  [$i] ID: ${statuses[i]['id']}, Text: $preview...');
+          }
+        }
+
+        return statuses;
       } else {
         throw Exception('Failed to fetch user statuses: ${response.statusCode}');
       }
@@ -676,6 +687,54 @@ class ApiService {
   }
 
   // Delete a status
+  // Record a status view
+  Future<void> recordStatusView(String statusId) async {
+    final String apiUrl = '$baseUrl/statuses/$statusId/view';
+    final token = await AuthService.getToken();
+
+    try {
+      await http.post(
+        Uri.parse(apiUrl),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+    } catch (error) {
+      if (kDebugMode) {
+        print('Error recording status view: $error');
+      }
+    }
+  }
+
+  // Get viewers for a status
+  Future<List<Map<String, dynamic>>> getStatusViewers(String statusId) async {
+    final String apiUrl = '$baseUrl/statuses/$statusId/viewers';
+    final token = await AuthService.getToken();
+
+    try {
+      final response = await http.get(
+        Uri.parse(apiUrl),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return List<Map<String, dynamic>>.from(data['viewers']);
+      } else {
+        throw Exception('Failed to fetch viewers: ${response.statusCode}');
+      }
+    } catch (error) {
+      if (kDebugMode) {
+        print('Error fetching status viewers: $error');
+      }
+      rethrow;
+    }
+  }
+
   Future<void> deleteStatus(String statusId) async {
     final String apiUrl = '$baseUrl/statuses/$statusId';
     final token = await AuthService.getToken();

@@ -79,8 +79,9 @@ router.get("/friends", authenticateToken, async (req, res) => {
 
   try {
     // Query statuses from accepted friends, created within last 24 hours
+    // Also check if current user has viewed each status
     const result = await db.query(`
-      SELECT
+      SELECT DISTINCT
         s.id,
         s.user_id,
         s.text_content,
@@ -88,13 +89,15 @@ router.get("/friends", authenticateToken, async (req, res) => {
         s.created_at,
         u.first_name,
         u.last_name,
-        u.username
+        u.username,
+        CASE WHEN sv.viewer_id IS NOT NULL THEN true ELSE false END as has_viewed
       FROM statuses s
       INNER JOIN users u ON s.user_id = u.id
       INNER JOIN friends f ON (
         (f.user_id = $1 AND f.friend_id = s.user_id)
         OR (f.friend_id = $1 AND f.user_id = s.user_id)
       )
+      LEFT JOIN status_views sv ON s.id = sv.status_id AND sv.viewer_id = $1
       WHERE f.status = 'accepted'
       AND s.user_id != $1
       AND s.created_at > NOW() - INTERVAL '24 hours'
@@ -108,7 +111,8 @@ router.get("/friends", authenticateToken, async (req, res) => {
       username: row.username,
       textContent: row.text_content,
       backgroundColor: row.background_color,
-      createdAt: row.created_at
+      createdAt: row.created_at,
+      hasViewed: row.has_viewed
     }));
 
     res.json({ statuses });
@@ -157,6 +161,90 @@ router.get("/me", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Error fetching user statuses:", error);
     res.status(500).json({ message: "Failed to fetch user statuses" });
+  }
+});
+
+// POST /statuses/:id/view - Record that user viewed a status
+router.post("/:id/view", authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.userId;
+
+  try {
+    // Don't record views for own statuses
+    const statusCheck = await db.query(`
+      SELECT user_id FROM statuses WHERE id = $1
+    `, [id]);
+
+    if (statusCheck.rows.length === 0) {
+      return res.status(404).json({ message: "Status not found" });
+    }
+
+    if (statusCheck.rows[0].user_id === userId) {
+      return res.status(200).json({ message: "Cannot view own status" });
+    }
+
+    // Insert or update view record
+    await db.query(`
+      INSERT INTO status_views (status_id, viewer_id, viewed_at)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (status_id, viewer_id)
+      DO UPDATE SET viewed_at = NOW()
+    `, [id, userId]);
+
+    res.status(200).json({ message: "View recorded" });
+
+  } catch (error) {
+    console.error("Error recording status view:", error);
+    res.status(500).json({ message: "Failed to record view" });
+  }
+});
+
+// GET /statuses/:id/viewers - Get list of viewers for a status
+router.get("/:id/viewers", authenticateToken, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.userId;
+
+  try {
+    // Verify the status belongs to the user
+    const statusCheck = await db.query(`
+      SELECT user_id FROM statuses WHERE id = $1
+    `, [id]);
+
+    if (statusCheck.rows.length === 0) {
+      return res.status(404).json({ message: "Status not found" });
+    }
+
+    if (statusCheck.rows[0].user_id !== userId) {
+      return res.status(403).json({ message: "Not authorized to view this" });
+    }
+
+    // Get all viewers with user info
+    const result = await db.query(`
+      SELECT
+        sv.viewer_id,
+        sv.viewed_at,
+        u.first_name,
+        u.last_name,
+        u.username
+      FROM status_views sv
+      INNER JOIN users u ON sv.viewer_id = u.id
+      WHERE sv.status_id = $1
+      ORDER BY sv.viewed_at DESC
+    `, [id]);
+
+    const viewers = result.rows.map(row => ({
+      viewerId: row.viewer_id,
+      viewedAt: row.viewed_at,
+      firstName: row.first_name,
+      lastName: row.last_name,
+      username: row.username
+    }));
+
+    res.json({ viewers });
+
+  } catch (error) {
+    console.error("Error fetching status viewers:", error);
+    res.status(500).json({ message: "Failed to fetch viewers" });
   }
 });
 

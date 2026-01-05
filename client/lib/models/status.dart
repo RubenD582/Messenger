@@ -7,6 +7,7 @@ class Status {
   final String textContent;
   final String backgroundColor;
   final DateTime createdAt;
+  final bool hasViewed;
 
   Status({
     required this.id,
@@ -16,6 +17,7 @@ class Status {
     required this.textContent,
     required this.backgroundColor,
     required this.createdAt,
+    this.hasViewed = false,
   });
 
   // Factory constructor to create Status from JSON (API response)
@@ -28,6 +30,7 @@ class Status {
       textContent: json['textContent'] ?? json['text_content'] ?? '',
       backgroundColor: json['backgroundColor'] ?? json['background_color'] ?? '#5856D6',
       createdAt: _parseDateTime(json['createdAt'] ?? json['created_at']),
+      hasViewed: json['hasViewed'] ?? json['has_viewed'] ?? false,
     );
   }
 
@@ -106,6 +109,7 @@ class Status {
     String? textContent,
     String? backgroundColor,
     DateTime? createdAt,
+    bool? hasViewed,
   }) {
     return Status(
       id: id ?? this.id,
@@ -115,6 +119,7 @@ class Status {
       textContent: textContent ?? this.textContent,
       backgroundColor: backgroundColor ?? this.backgroundColor,
       createdAt: createdAt ?? this.createdAt,
+      hasViewed: hasViewed ?? this.hasViewed,
     );
   }
 

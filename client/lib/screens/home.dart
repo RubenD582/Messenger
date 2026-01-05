@@ -7,6 +7,8 @@ import 'package:client/screens/status_creation_screen.dart';
 import 'package:client/screens/status_viewer_screen.dart';
 import 'package:client/models/status.dart';
 import 'package:client/transitions/circular_page_route.dart';
+import 'package:client/widgets/segmented_status_ring.dart';
+import 'package:client/services/status_view_service.dart';
 import 'discover.dart' as discover;
 import 'package:client/services/api_service.dart';
 import 'package:client/services/auth_service.dart';
@@ -55,6 +57,11 @@ class _HomeState extends State<Home> {
   @override
   void initState() {
     super.initState();
+
+    // Initialize status view service and clear old views
+    StatusViewService.init().then((_) {
+      StatusViewService.clearOldViews();
+    });
 
     setupAPIService().then((_) {
       fetchRequestCount();
@@ -249,9 +256,23 @@ class _HomeState extends State<Home> {
       final myStatusesData = await apiService.getMyStatuses();
       _myStatuses = myStatusesData.map((data) => Status.fromJson(data)).toList();
 
-      // Load friend statuses
+      if (kDebugMode) {
+        print('📊 Loaded ${_myStatuses.length} of my statuses:');
+        for (var i = 0; i < _myStatuses.length; i++) {
+          final text = _myStatuses[i].textContent;
+          final preview = text.length > 20 ? text.substring(0, 20) : text;
+          print('  [$i] ID: ${_myStatuses[i].id}, Text: $preview...');
+        }
+      }
+
+      // Load friend statuses and mark as viewed based on local storage
       final friendStatusesData = await apiService.getFriendStatuses();
-      _friendStatuses = friendStatusesData.map((data) => Status.fromJson(data)).toList();
+      _friendStatuses = friendStatusesData.map((data) {
+        final status = Status.fromJson(data);
+        // Check if this status has been viewed in local storage
+        final hasViewed = StatusViewService.hasViewed(status.id);
+        return status.copyWith(hasViewed: hasViewed);
+      }).toList();
 
       setState(() {});
     } catch (error) {
@@ -288,10 +309,8 @@ class _HomeState extends State<Home> {
     final circleCenter = offset + Offset(renderBox.size.width / 2, renderBox.size.height / 2);
 
     Navigator.of(context).push(
-      CircularRevealPageRoute(
+      MaterialPageRoute(
         builder: (context) => StatusCreationScreen(apiService: apiService),
-        originOffset: circleCenter,
-        originRadius: 32.0, // Status circle radius
       ),
     );
   }
@@ -817,9 +836,16 @@ class _HomeState extends State<Home> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (context) => StatusViewerScreen(statuses: _myStatuses),
+                                  builder: (context) => StatusViewerScreen(
+                                    statuses: _myStatuses,
+                                    currentUserId: uuid,
+                                    apiService: apiService,
+                                  ),
                                 ),
-                              );
+                              ).then((_) {
+                                // Reload statuses when coming back
+                                _loadStatuses();
+                              });
                             },
                             child: const Text('View Status'),
                           ),
@@ -851,33 +877,36 @@ class _HomeState extends State<Home> {
                   children: [
                     Stack(
                       children: [
-                        Container(
-                          width: 64,
-                          height: 64,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: hasMyStatus
-                                ? const LinearGradient(
-                                    colors: [Color(0xFF8B7FE8), Color(0xFF5856D6)],
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                  )
-                                : null,
-                            color: hasMyStatus ? null : const Color(0xFF1C1C1E),
-                          ),
-                          padding: const EdgeInsets.all(2.5),
-                          child: Container(
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.black,
-                            ),
-                            padding: const EdgeInsets.all(2.5),
-                            child: const CircleAvatar(
-                              radius: 26,
-                              backgroundImage: AssetImage('assets/noprofile.png'),
-                            ),
-                          ),
-                        ),
+                        hasMyStatus
+                            ? SegmentedStatusRing(
+                                segmentCount: _myStatuses.length,
+                                size: 64,
+                                strokeWidth: 2.5,
+                                child: const CircleAvatar(
+                                  radius: 26,
+                                  backgroundImage: AssetImage('assets/noprofile.png'),
+                                ),
+                              )
+                            : Container(
+                                width: 64,
+                                height: 64,
+                                decoration: const BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Color(0xFF48484A),
+                                ),
+                                padding: const EdgeInsets.all(2.5),
+                                child: Container(
+                                  decoration: const BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: Colors.black,
+                                  ),
+                                  padding: const EdgeInsets.all(2.5),
+                                  child: const CircleAvatar(
+                                    radius: 26,
+                                    backgroundImage: AssetImage('assets/noprofile.png'),
+                                  ),
+                                ),
+                              ),
                         // Always show + icon
                         Positioned(
                           right: 0,
@@ -902,6 +931,12 @@ class _HomeState extends State<Home> {
           } else {
             // Friend status circle
             final friendStatuses = uniqueFriendStatuses[index - 1];
+            final viewedCount = friendStatuses.where((status) => status.hasViewed).length;
+
+            // Find the first unviewed status index
+            final firstUnviewedIndex = friendStatuses.indexWhere((status) => !status.hasViewed);
+            final initialIndex = firstUnviewedIndex != -1 ? firstUnviewedIndex : 0;
+
             final storyKey = GlobalKey(); // Add a GlobalKey here
             return Padding(
               padding: const EdgeInsets.only(right: 6),
@@ -916,40 +951,35 @@ class _HomeState extends State<Home> {
                   final circleCenter = offset + Offset(renderBox.size.width / 2, renderBox.size.height / 2);
 
                   // View friend statuses with CircularRevealPageRoute
+                  // Start from the first unviewed status
                   Navigator.push(
                     context,
                     CircularRevealPageRoute(
-                      builder: (context) => StatusViewerScreen(statuses: friendStatuses),
+                      builder: (context) => StatusViewerScreen(
+                        statuses: friendStatuses,
+                        currentUserId: uuid,
+                        apiService: apiService,
+                        initialIndex: initialIndex,
+                      ),
                       originOffset: circleCenter,
                       originRadius: 32.0, // Status circle radius
                     ),
-                  );
+                  ).then((_) {
+                    // Reload statuses when coming back to update viewed status
+                    _loadStatuses();
+                  });
                 },
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: LinearGradient(
-                          colors: [Color(0xFF8B7FE8), Color(0xFF5856D6)],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                      ),
-                      padding: const EdgeInsets.all(2.5),
-                      child: Container(
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.black,
-                        ),
-                        padding: const EdgeInsets.all(2.5),
-                        child: const CircleAvatar(
-                          radius: 26,
-                          backgroundImage: AssetImage('assets/noprofile.png'),
-                        ),
+                    SegmentedStatusRing(
+                      segmentCount: friendStatuses.length,
+                      viewedCount: viewedCount,
+                      size: 64,
+                      strokeWidth: 2.5,
+                      child: const CircleAvatar(
+                        radius: 26,
+                        backgroundImage: AssetImage('assets/noprofile.png'),
                       ),
                     ),
                   ],
