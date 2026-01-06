@@ -18,7 +18,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:flutter_sticky_header/flutter_sticky_header.dart';
 import 'package:hive/hive.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 
@@ -30,7 +29,6 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
-  final TextEditingController _searchController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
   double _scrollYOffset = 0.0;
@@ -44,7 +42,6 @@ class _HomeState extends State<Home> {
   bool isLoading = true;
 
   late StreamSubscription<int> _pendingFriendRequestsSubscription;
-  int _pendingFriendRequestsCount = 0;
 
   // Status state
   List<Status> _myStatuses = [];
@@ -66,6 +63,26 @@ class _HomeState extends State<Home> {
   int _selectedIndex = 0;
 
   void _onItemTapped(int index) {
+    if (index == 2) {
+      // Bell icon tapped, show requests modal
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: Colors.transparent,
+        isScrollControlled: true,
+        builder: (context) => ClipRRect(
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+          child: Container(
+            color: Colors.black,
+            height: MediaQuery.of(context).size.height * 0.7,
+            child: const PendingRequestsScreen(),
+          ),
+        ),
+      );
+      return;
+    }
     setState(() {
       _selectedIndex = index;
     });
@@ -115,7 +132,6 @@ class _HomeState extends State<Home> {
           _pendingFriendRequestsSubscription = apiService.pendingRequestsStream
               .listen((count) {
                 setState(() {
-                  _pendingFriendRequestsCount = count;
                 });
               });
         })
@@ -240,9 +256,8 @@ class _HomeState extends State<Home> {
 
   Future<void> fetchRequestCount() async {
     try {
-      final requests = await apiService.getRequestCount();
+          await apiService.getRequestCount();
       setState(() {
-        _pendingFriendRequestsCount = requests;
         isLoading = false;
       });
     } catch (error) {
@@ -409,9 +424,9 @@ class _HomeState extends State<Home> {
         statusCircleKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return;
 
-    final offset = renderBox.localToGlobal(Offset.zero);
-    final circleCenter =
-        offset + Offset(renderBox.size.width / 2, renderBox.size.height / 2);
+     // final offset = renderBox.localToGlobal(Offset.zero);
+     // final circleCenter =
+     //     offset + Offset(renderBox.size.width / 2, renderBox.size.height / 2);
 
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -422,27 +437,39 @@ class _HomeState extends State<Home> {
 
   void _showSearchModal() {
     showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder:
-          (context) => DraggableScrollableSheet(
-            initialChildSize: 0.9,
-            minChildSize: 0.5,
-            maxChildSize: 0.95,
-            builder: (_, controller) {
-              return Container(
-                decoration: const BoxDecoration(
-                  color: Colors.black,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
+          context: context,
+          isScrollControlled: true,
+          backgroundColor: Colors.transparent,
+          builder:
+              (context) => Stack(
+                children: [
+                  BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                    child: Container(
+                      color: Colors.transparent,
+                    ),
                   ),
-                ),
-                child: discover.DiscoverScreen(),
-              );
-            },
-          ),
+                  DraggableScrollableSheet(
+                initialChildSize: 0.9,
+                minChildSize: 0.5,
+                maxChildSize: 0.95,
+                builder: (_, controller) {
+                  return ClipRRect(
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: Colors.black,
+                      ),
+                      child: discover.DiscoverScreen(),
+                    ),
+                  );
+                },
+              ),
+                ],
+              ),
     );
   }
 
@@ -655,8 +682,6 @@ class _HomeState extends State<Home> {
                           const SizedBox(width: 6),
                           chip("Status"),
                           const SizedBox(width: 6),
-                          chip("Requests", _pendingFriendRequestsCount),
-                          const SizedBox(width: 6),
                           Container(
                             height: 32,
                             width: 32,
@@ -679,9 +704,9 @@ class _HomeState extends State<Home> {
             ),
           ),
 
-          // **Friend List / Requests**
+          // **Friend List**
           if (selectedChip != "Status")
-            if (_friends.isEmpty && !isLoading && selectedChip != "Requests")
+            if (_friends.isEmpty && !isLoading)
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: _buildEmptyState(),
@@ -691,9 +716,7 @@ class _HomeState extends State<Home> {
                 child: Transform.translate(
                   offset: Offset(0, _scrollYOffset),
                   child: Container(
-                    child: selectedChip == "Requests"
-                        ? PendingRequestsScreen()
-                        : friendList(),
+                    child: friendList(),
                   ),
                 ),
               ),
@@ -702,17 +725,6 @@ class _HomeState extends State<Home> {
     );
   }
 
-  Widget _iconButton(IconData icon, Color bgColor, VoidCallback onTap) {
-    return Container(
-      width: 26,
-      height: 26,
-      decoration: BoxDecoration(shape: BoxShape.circle, color: bgColor),
-      child: GestureDetector(
-        onTap: onTap,
-        child: Icon(icon, size: 20, color: Colors.white),
-      ),
-    );
-  }
 
   Widget friendList() {
     return RefreshIndicator(
@@ -733,7 +745,7 @@ class _HomeState extends State<Home> {
 
           // Real data from WebSocket streams
           final bool isTyping = _typingStatus[conversationId] ?? false;
-          final int unreadCount = _unreadCounts[conversationId] ?? 0;
+          // final int unreadCount = _unreadCounts[conversationId] ?? 0;
 
           // Mock data for features not yet implemented
 
@@ -807,6 +819,7 @@ class _HomeState extends State<Home> {
                       vertical: 8,
                     ),
                     child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         // Profile picture with online status
                         Stack(
@@ -819,47 +832,33 @@ class _HomeState extends State<Home> {
                           ],
                         ),
                         SizedBox(width: 12),
-                        // Message info
+                        // Message and name
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      '${user['first_name']} ${user['last_name']}',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w500,
-                                        fontSize: 16,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  IconButton(
-                                    icon: Icon(CupertinoIcons.camera_fill, color: Colors.white, size: 20),
-                                    onPressed: () {
-                                      // TODO: Implement camera functionality
-                                    },
-                                    padding: EdgeInsets.zero,
-                                    constraints: BoxConstraints(),
-                                  ),
-                                ],
+                              // Name at the top
+                              Text(
+                                '${user['first_name']} ${user['last_name']}',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 15,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              SizedBox(height: 0),
+                              SizedBox(height: 4),
+                              // Message and timestamp below name
                               isTyping
                                   ? Text(
-                                    'Typing...',
-                                    style: TextStyle(
-                                      color: Color(0xFF30D158),
-                                      fontSize: 14,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  )
+                                      'Typing...',
+                                      style: TextStyle(
+                                        color: Color(0xFF30D158),
+                                        fontSize: 13,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    )
                                   : RichText(
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
@@ -870,7 +869,7 @@ class _HomeState extends State<Home> {
                                             style: TextStyle(
                                               color: Colors.white,
                                               fontWeight: FontWeight.w400,
-                                              fontSize: 14,
+                                              fontSize: 13,
                                             ),
                                           ),
                                           TextSpan(
@@ -878,7 +877,7 @@ class _HomeState extends State<Home> {
                                             style: TextStyle(
                                               color: Color(0xFF8E8E93),
                                               fontWeight: FontWeight.w400,
-                                              fontSize: 13,
+                                              fontSize: 12,
                                             ),
                                           ),
                                           TextSpan(
@@ -886,7 +885,7 @@ class _HomeState extends State<Home> {
                                             style: TextStyle(
                                               color: Color(0xFF8E8E93),
                                               fontWeight: FontWeight.w400,
-                                              fontSize: 13,
+                                              fontSize: 12,
                                             ),
                                           ),
                                         ],
@@ -894,6 +893,15 @@ class _HomeState extends State<Home> {
                                     ),
                             ],
                           ),
+                        ),
+                        // Camera icon on the right, vertically centered
+                        IconButton(
+                          icon: Icon(CupertinoIcons.camera, color: Colors.white.withValues(alpha: 0.5), size: 21),
+                          onPressed: () {
+                            // TODO: Implement camera functionality
+                          },
+                          padding: EdgeInsets.zero,
+                          constraints: BoxConstraints(),
                         ),
                       ],
                     ),
@@ -1109,7 +1117,7 @@ class _HomeState extends State<Home> {
                   if (renderBox == null) return;
 
                   final offset = renderBox.localToGlobal(Offset.zero);
-                  final circleCenter =
+                  // final circleCenter =
                       offset +
                       Offset(
                         renderBox.size.width / 2,
@@ -1128,7 +1136,7 @@ class _HomeState extends State<Home> {
                             apiService: apiService,
                             initialIndex: initialIndex,
                           ),
-                      originOffset: circleCenter,
+                      originOffset: Offset(0, 0), // Provide a default offset
                       originRadius: 32.0, // Status circle radius
                     ),
                   ).then((_) {
@@ -1177,39 +1185,20 @@ class _HomeState extends State<Home> {
             decoration: BoxDecoration(
               color: isSelected ? Colors.white : const Color(0xFF1C1C1E),
               borderRadius: const BorderRadius.all(Radius.circular(100)),
-              // border: isSelected ? null : Border.all(color: Colors.grey[600]!), // Removed border
             ),
             child: Center(
               child: Padding(
                 padding: const EdgeInsets.only(left: 15, right: 15),
-                child: Row(
-                  children: [
-                    Text(
-                      name,
-                      style: TextStyle(
-                        color: isSelected
-                            ? Colors.black
-                            : Colors.white.withAlpha(150),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: -0.3,
-                      ),
-                    ),
-                    if (count != null && count != 0)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 4.0),
-                        child: Text(
-                          '(${count >= 10 ? '9+' : count.toString()})',
-                          style: TextStyle(
-                            color: isSelected
-                                ? Colors.black
-                                : Colors.white.withAlpha(150),
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                  ],
+                child: Text(
+                  name,
+                  style: TextStyle(
+                    color: isSelected
+                        ? Colors.black
+                        : Colors.white.withAlpha(150),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: -0.3,
+                  ),
                 ),
               ),
             ),

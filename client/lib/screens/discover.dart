@@ -413,17 +413,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             Expanded(
               child:
                   _isLoadingSuggestions
-                      ? _buildSuggestionsShimmer()
+                      ? const Center(child: CupertinoActivityIndicator(radius: 16))
                       : _filteredSuggestions.isEmpty
                       ? Center(
                         child: Text(
                           _searchController.text.isNotEmpty
                               ? 'No results found'
                               : 'No suggestions available',
-
                           style: TextStyle(
                             color: Colors.grey[600],
-
                             fontSize: 14,
                           ),
                         ),
