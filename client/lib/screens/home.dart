@@ -17,6 +17,7 @@ import 'package:client/theme/colors.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:flutter_sticky_header/flutter_sticky_header.dart';
 import 'package:hive/hive.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -61,6 +62,14 @@ class _HomeState extends State<Home> {
   late StreamSubscription<Map<String, dynamic>> _newMessageSubscription;
   late StreamSubscription<Map<String, dynamic>> _typingIndicatorSubscription;
   late StreamSubscription<Map<String, dynamic>> _readReceiptSubscription;
+
+  int _selectedIndex = 0;
+
+  void _onItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+  }
 
   @override
   void initState() {
@@ -462,6 +471,87 @@ class _HomeState extends State<Home> {
     return Scaffold(
       backgroundColor: Colors.black,
       extendBodyBehindAppBar: true,
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(color: Colors.grey[900]!, width: 0.5),
+          ),
+        ),
+        child: BottomNavigationBar(
+          backgroundColor: Colors.black,
+          items: <BottomNavigationBarItem>[
+            BottomNavigationBarItem(
+              icon: SizedBox(
+                width: 24,
+                height: 24,
+                child: Opacity(
+                  opacity: 0.5,
+                  child: SvgPicture.asset('assets/home.svg'),
+                ),
+              ),
+              activeIcon: SizedBox(
+                width: 24,
+                height: 24,
+                child: SvgPicture.asset('assets/home.svg'),
+              ),
+              label: '',
+            ),
+            BottomNavigationBarItem(
+              icon: SizedBox(
+                width: 24,
+                height: 24,
+                child: Opacity(
+                  opacity: 0.5,
+                  child: Icon(CupertinoIcons.search, color: Colors.white),
+                ),
+              ),
+              activeIcon: SizedBox(
+                width: 24,
+                height: 24,
+                child: Icon(CupertinoIcons.search, color: Colors.white),
+              ),
+              label: '',
+            ),
+            BottomNavigationBarItem(
+              icon: SizedBox(
+                width: 24,
+                height: 24,
+                child: Opacity(
+                  opacity: 0.5,
+                  child: Icon(CupertinoIcons.bell, color: Colors.white),
+                ),
+              ),
+              activeIcon: SizedBox(
+                width: 24,
+                height: 24,
+                child: Icon(CupertinoIcons.bell, color: Colors.white),
+              ),
+              label: '',
+            ),
+            BottomNavigationBarItem(
+              icon: SizedBox(
+                width: 24,
+                height: 24,
+                child: Opacity(
+                  opacity: 0.5,
+                  child: SvgPicture.asset('assets/profile.svg'),
+                ),
+              ),
+              activeIcon: SizedBox(
+                width: 24,
+                height: 24,
+                child: SvgPicture.asset('assets/profile.svg'),
+              ),
+              label: '',
+            ),
+          ],
+          currentIndex: _selectedIndex,
+          onTap: _onItemTapped,
+          showSelectedLabels: false,
+          showUnselectedLabels: false,
+          type: BottomNavigationBarType.fixed,
+        ),
+      ),
       body: CustomScrollView(
         controller: _scrollController,
         slivers: [
@@ -470,8 +560,8 @@ class _HomeState extends State<Home> {
             floating: true,
             pinned: true,
             scrolledUnderElevation: 0.0,
-            expandedHeight: 120,
-            toolbarHeight: 70,
+            expandedHeight: 60,
+            toolbarHeight: 40,
             automaticallyImplyLeading: false,
             flexibleSpace: Builder(
               builder: (context) {
@@ -489,29 +579,36 @@ class _HomeState extends State<Home> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text(
-                              "Messages",
-                              textAlign: TextAlign.left,
-                              style: TextStyle(
-                                color: AppColors.textPrimary,
-                                fontSize: 36,
-                                fontWeight: FontWeight.w600,
+                            IconButton(
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => discover.DiscoverScreen(),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(
+                                CupertinoIcons.search,
+                                color: Colors.white,
                               ),
                             ),
-                            Row(
-                              children: [
-                                _iconButton(
-                                  Icons.more_horiz,
-                                  Colors.white.withAlpha(50),
-                                  _showSearchModal,
+                            Expanded(
+                              child: Center(
+                                child: SvgPicture.asset(
+                                  'assets/way.svg',
+                                  height: 20,
                                 ),
-                                const SizedBox(width: 10),
-                                _iconButton(
-                                  Icons.add,
-                                  const Color(0xFF5856D6),
-                                  _showSearchModal,
-                                ),
-                              ],
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () {
+                                _showSearchModal();
+                              },
+                              icon: const Icon(
+                                CupertinoIcons.square_pencil,
+                                color: Colors.white,
+                              ),
                             ),
                           ],
                         ),
@@ -523,47 +620,31 @@ class _HomeState extends State<Home> {
             ),
           ),
 
-          // **Sticky Search Header**
-          SliverStickyHeader(
-            header: Container(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-              decoration: const BoxDecoration(color: AppColors.background),
-              child: Transform.translate(
-                offset: Offset(0, _scrollYOffset),
-
-                child: CupertinoSearchTextField(
-                  controller: _searchController,
-                  placeholder: "Search conversations",
-                  backgroundColor: AppColors.surfaceVariant,
-                  itemColor: Colors.grey[600] ?? Colors.grey,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w400,
-                  ),
-                  placeholderStyle: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 17,
-                    fontWeight: FontWeight.w400,
-                  ),
-                  onChanged: (value) {},
-                  onSubmitted: (value) {},
+          // **Stories Bar (UI Mockup)**
+          if (selectedChip == "All" || selectedChip == "Status")
+            SliverPadding(
+              padding: const EdgeInsets.only(bottom: 12),
+              sliver: SliverToBoxAdapter(
+                child: Transform.translate(
+                  offset: Offset(0, _scrollYOffset * 0.5),
+                  child: _buildStoriesBar(),
                 ),
               ),
             ),
-            sliver: SliverToBoxAdapter(
+
+            SliverPadding(
+              padding: const EdgeInsets.symmetric(vertical: 15),            
+              sliver: SliverToBoxAdapter(
               child: Transform.translate(
                 offset: Offset(0, _scrollYOffset * 0.75),
                 child: Container(
                   padding: const EdgeInsets.only(
                     left: 12,
                     right: 12,
-                    top: 8,
-                    bottom: 8,
                   ),
                   child: AnimatedOpacity(
                     opacity: 1 - _scrollYOpacity,
-                    duration: Duration(milliseconds: 200),
+                    duration: const Duration(milliseconds: 200),
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
@@ -572,12 +653,14 @@ class _HomeState extends State<Home> {
                           const SizedBox(width: 6),
                           chip("Pinned"),
                           const SizedBox(width: 6),
+                          chip("Status"),
+                          const SizedBox(width: 6),
                           chip("Requests", _pendingFriendRequestsCount),
                           const SizedBox(width: 6),
                           Container(
                             height: 32,
                             width: 32,
-                            decoration: BoxDecoration(
+                            decoration: const BoxDecoration(
                               shape: BoxShape.circle,
                               color: Color(0xFF1C1C1E),
                             ),
@@ -596,32 +679,24 @@ class _HomeState extends State<Home> {
             ),
           ),
 
-          // **Stories Bar (UI Mockup)**
-          if (selectedChip == "All")
-            SliverToBoxAdapter(
-              child: Transform.translate(
-                offset: Offset(0, _scrollYOffset * 0.5),
-                child: _buildStoriesBar(),
-              ),
-            ),
-
           // **Friend List / Requests**
-          if (_friends.isEmpty && !isLoading && selectedChip != "Requests")
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: _buildEmptyState(),
-            )
-          else
-            SliverToBoxAdapter(
-              child: Transform.translate(
-                offset: Offset(0, _scrollYOffset),
-                child: Container(
-                  child: selectedChip == "Requests"
-                      ? PendingRequestsScreen()
-                      : friendList(),
+          if (selectedChip != "Status")
+            if (_friends.isEmpty && !isLoading && selectedChip != "Requests")
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: _buildEmptyState(),
+              )
+            else
+              SliverToBoxAdapter(
+                child: Transform.translate(
+                  offset: Offset(0, _scrollYOffset),
+                  child: Container(
+                    child: selectedChip == "Requests"
+                        ? PendingRequestsScreen()
+                        : friendList(),
+                  ),
                 ),
               ),
-            ),
         ],
       ),
     );
@@ -661,10 +736,9 @@ class _HomeState extends State<Home> {
           final int unreadCount = _unreadCounts[conversationId] ?? 0;
 
           // Mock data for features not yet implemented
-          final bool isOnline =
-              index % 3 == 0; // Mock: every 3rd user is online
+
           final String lastMessage =
-              _lastMessages[conversationId] ?? 'Tap to send a message';
+              _lastMessages[conversationId] ?? 'Say Hi!';
           final String timestamp =
               index % 6 == 0
                   ? 'Just now'
@@ -730,7 +804,7 @@ class _HomeState extends State<Home> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
-                      vertical: 12,
+                      vertical: 8,
                     ),
                     child: Row(
                       children: [
@@ -738,27 +812,10 @@ class _HomeState extends State<Home> {
                         Stack(
                           children: [
                             CircleAvatar(
-                              radius: 24,
+                              radius: 26,
                               backgroundColor: Color(0xFF2C2C2E),
                               backgroundImage: AssetImage(profilePicture),
                             ),
-                            if (isOnline)
-                              Positioned(
-                                right: 0,
-                                bottom: 0,
-                                child: Container(
-                                  width: 14,
-                                  height: 14,
-                                  decoration: BoxDecoration(
-                                    color: Color(0xFF30D158),
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: AppColors.background,
-                                      width: 2,
-                                    ),
-                                  ),
-                                ),
-                              ),
                           ],
                         ),
                         SizedBox(width: 12),
@@ -783,16 +840,14 @@ class _HomeState extends State<Home> {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  if (!isTyping) ...[
-                                    SizedBox(width: 8),
-                                    Text(
-                                      timestamp,
-                                      style: TextStyle(
-                                        color: Color(0xFF8E8E93),
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  ],
+                                  IconButton(
+                                    icon: Icon(CupertinoIcons.camera_fill, color: Colors.white, size: 20),
+                                    onPressed: () {
+                                      // TODO: Implement camera functionality
+                                    },
+                                    padding: EdgeInsets.zero,
+                                    constraints: BoxConstraints(),
+                                  ),
                                 ],
                               ),
                               SizedBox(height: 0),
@@ -805,15 +860,38 @@ class _HomeState extends State<Home> {
                                       fontStyle: FontStyle.italic,
                                     ),
                                   )
-                                  : Text(
-                                    lastMessage,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                      color: Color(0xFF8E8E93),
-                                      fontSize: 14,
+                                  : RichText(
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      text: TextSpan(
+                                        children: [
+                                          TextSpan(
+                                            text: lastMessage,
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w400,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                          TextSpan(
+                                            text: ' • ',
+                                            style: TextStyle(
+                                              color: Color(0xFF8E8E93),
+                                              fontWeight: FontWeight.w400,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                          TextSpan(
+                                            text: timestamp,
+                                            style: TextStyle(
+                                              color: Color(0xFF8E8E93),
+                                              fontWeight: FontWeight.w400,
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
                             ],
                           ),
                         ),
@@ -875,8 +953,8 @@ class _HomeState extends State<Home> {
     final uniqueFriendStatuses = groupedStatuses.values.toList();
 
     return Container(
-      height: 100,
-      padding: EdgeInsets.symmetric(vertical: 12),
+      height: 70,
+      padding: EdgeInsets.zero,
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1083,7 +1161,7 @@ class _HomeState extends State<Home> {
 
   // Updated chip function with single selection handling
   Widget chip(String name, [int? count]) {
-    bool isSelected = selectedChip == name; // Check if the chip is selected
+    bool isSelected = selectedChip == name;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 0),
@@ -1097,53 +1175,35 @@ class _HomeState extends State<Home> {
           child: Container(
             height: 32,
             decoration: BoxDecoration(
-              color: isSelected ? Color(0xFF5856D6) : Color(0xFF1C1C1E),
+              color: isSelected ? Colors.white : const Color(0xFF1C1C1E),
               borderRadius: const BorderRadius.all(Radius.circular(100)),
+              // border: isSelected ? null : Border.all(color: Colors.grey[600]!), // Removed border
             ),
             child: Center(
               child: Padding(
-                padding: EdgeInsets.only(left: 15, right: 15),
+                padding: const EdgeInsets.only(left: 15, right: 15),
                 child: Row(
                   children: [
-                    // Display the count if it exists, or an empty string if count is null
-                    // if (count != null && count != 0 && !isSelected)
-                    //   Padding(
-                    //     padding: const EdgeInsets.only(right: 8.0),
-                    //     child: Container(
-                    //       width: 6,
-                    //       height: 6,
-                    //       decoration: BoxDecoration(
-                    //         color: isSelected ? Colors.white : Color.fromARGB(255, 0, 122, 255),
-                    //         borderRadius: BorderRadius.all(
-                    //           Radius.circular(100)
-                    //         )
-                    //       ),
-                    //     ),
-                    //   ),
                     Text(
                       name,
                       style: TextStyle(
-                        color:
-                            isSelected
-                                ? Colors.white
-                                : Color(0xFFFFFFFF).withAlpha(150),
+                        color: isSelected
+                            ? Colors.black
+                            : Colors.white.withAlpha(150),
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                         letterSpacing: -0.3,
                       ),
                     ),
-
-                    // Display the count if it exists, or an empty string if count is null
                     if (count != null && count != 0)
                       Padding(
                         padding: const EdgeInsets.only(left: 4.0),
                         child: Text(
                           '(${count >= 10 ? '9+' : count.toString()})',
                           style: TextStyle(
-                            color:
-                                isSelected
-                                    ? Colors.white
-                                    : Color.fromARGB(140, 255, 255, 255),
+                            color: isSelected
+                                ? Colors.black
+                                : Colors.white.withAlpha(150),
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
                           ),

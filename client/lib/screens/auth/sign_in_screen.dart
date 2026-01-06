@@ -149,7 +149,7 @@ class _SignInScreenState extends State<SignInScreen> {
                     );
                   },
                   child: const Text(
-                    'Don\'t have an account? Tap here',
+                    'Don\'t have an account?',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 14,
@@ -169,7 +169,7 @@ class _SignInScreenState extends State<SignInScreen> {
                   text: const TextSpan(
                     style: TextStyle(
                       color: AppColors.textTertiary,
-                      fontSize: 13,
+                      fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),
                     children: [

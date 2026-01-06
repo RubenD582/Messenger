@@ -104,6 +104,9 @@ flutter:
     - assets/highlighter.png
     - assets/neon.png
     - assets/way.svg
+    - assets/home.svg
+    - assets/profile.svg
+
 
   #   - images/a_dot_ham.jpeg
 
