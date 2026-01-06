@@ -57,44 +57,28 @@ class _Auth2FAVerificationScreenState
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        title: const Text(
+          'Verify Identity',
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        centerTitle: true,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary),
+          icon: const Icon(Icons.arrow_back, color: AppColors.textPrimary, size: 20),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          padding: const EdgeInsets.symmetric(horizontal: 12.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              const SizedBox(height: 60.0),
-
-              // Title
-              Text(
-                'Verify Your Identity',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-
-              // Subtitle
-              Text(
-                'We sent a verification code to',
-                textAlign: TextAlign.center,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: AppColors.textSecondary),
-              ),
-
-              Text(
-                widget.email,
-                textAlign: TextAlign.center,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(fontWeight: FontWeight.w600),
-              ),
+              const SizedBox(height: 20),
 
               const SizedBox(height: 48.0),
 
@@ -113,17 +97,19 @@ class _Auth2FAVerificationScreenState
               if (_isLoading)
                 const CupertinoActivityIndicator(radius: 16.0)
               else
-                CupertinoButton(
-                  padding: EdgeInsets.zero,
-                  onPressed: () {
-                    // TODO: Implement resend code functionality
-                    Fluttertoast.showToast(msg: 'Code resent!');
-                  },
-                  child: const Text(
-                    "Didn't receive a code? Resend",
-                    style: TextStyle(
-                      fontSize: 13.0,
-                      color: AppColors.primary,
+                Center(
+                  child: GestureDetector(
+                    onTap: () {
+                      Fluttertoast.showToast(msg: 'Code resent!');
+                    },
+                    child: const Text(
+                      "Didn't receive a code? Tap here",
+                      style: TextStyle(
+                        fontSize: 14.0,
+                        color: Colors.white,
+                        decoration: TextDecoration.underline,
+                        decorationColor: Colors.white,
+                      ),
                     ),
                   ),
                 ),

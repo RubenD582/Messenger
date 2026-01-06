@@ -1,4 +1,3 @@
-import 'package:client/components/apple_button.dart';
 import 'package:client/components/textfield.dart';
 import 'package:client/screens/auth/email_verification_screen.dart';
 import 'package:client/services/auth_service.dart';
@@ -34,32 +33,34 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final AuthService _authService = AuthService();
   bool _isLoading = false;
 
-  String _currentPageTitle = "What's your name?"; // Initialize with the first step's title
-
   @override
   void initState() {
     super.initState();
-    _pageController.addListener(_updatePageTitle);
+    // Add listeners to update button state
+    _firstNameController.addListener(_updateButtonState);
+    _lastNameController.addListener(_updateButtonState);
+    _usernameController.addListener(_updateButtonState);
+    _emailController.addListener(_updateButtonState);
+    _passwordController.addListener(_updateButtonState);
+    _confirmPasswordController.addListener(_updateButtonState);
+    // Auto-focus first field
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _firstNameFocusNode.requestFocus();
+    });
   }
 
-  void _updatePageTitle() {
-    if (_pageController.page == null) return;
-    setState(() {
-      if (_pageController.page! < 0.5) {
-        _currentPageTitle = "What's your name?";
-      } else if (_pageController.page! < 1.5) {
-        _currentPageTitle = "Choose a username";
-      } else if (_pageController.page! < 2.5) {
-        _currentPageTitle = "What's your email?";
-      } else {
-        _currentPageTitle = "Create a password";
-      }
-    });
+  void _updateButtonState() {
+    setState(() {});
   }
 
   @override
   void dispose() {
-    _pageController.removeListener(_updatePageTitle);
+    _firstNameController.removeListener(_updateButtonState);
+    _lastNameController.removeListener(_updateButtonState);
+    _usernameController.removeListener(_updateButtonState);
+    _emailController.removeListener(_updateButtonState);
+    _passwordController.removeListener(_updateButtonState);
+    _confirmPasswordController.removeListener(_updateButtonState);
     _pageController.dispose();
     _firstNameController.dispose();
     _lastNameController.dispose();
@@ -124,11 +125,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text(
-          _currentPageTitle,
-          style: const TextStyle(
+        title: const Text(
+          'Sign Up',
+          style: TextStyle(
             color: AppColors.textPrimary,
-            fontSize: 17,
+            fontSize: 18,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -155,8 +156,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
         physics: const NeverScrollableScrollPhysics(),
         children: [
           _buildStep(
-            // title: "What's your name?", // Removed
-            description: "To help your friends recognize you.",
+            title: "What's your name?",
             fields: [
               CustomCupertinoTextField(
                 label: 'First Name',
@@ -183,9 +183,11 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 curve: Curves.easeInOut,
               );
             },
+            isButtonEnabled: () => _firstNameController.text.trim().isNotEmpty &&
+                                    _lastNameController.text.trim().isNotEmpty,
           ),
           _buildStep(
-            description: "This is how friends will find you.",
+            title: "Choose a username",
             fields: [
               CustomCupertinoTextField(
                 label: 'Username',
@@ -210,10 +212,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 curve: Curves.easeInOut,
               );
             },
+            isButtonEnabled: () => _usernameController.text.trim().isNotEmpty,
           ),
           _buildStep(
-            // title: "What's your email?", // Removed
-            description: "You'll use this to sign in.",
+            title: "What's your email?",
             fields: [
               CustomCupertinoTextField(
                 label: 'Email',
@@ -234,10 +236,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 curve: Curves.easeInOut,
               );
             },
+            isButtonEnabled: () => _emailController.text.trim().isNotEmpty,
           ),
           _buildStep(
-            // title: 'Create a password', // Removed
-            description: "Make sure it's at least 8 characters long.",
+            title: "Create a password",
             fields: [
               CustomCupertinoTextField(
                 label: 'Password',
@@ -257,6 +259,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
             ],
             onNext: _signUp,
             buttonText: 'Sign Up',
+            isLastStep: true,
+            isButtonEnabled: () => _passwordController.text.isNotEmpty &&
+                                    _confirmPasswordController.text.isNotEmpty,
           ),
         ],
       ),
@@ -264,18 +269,32 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 
   Widget _buildStep({
-    // removed title: required String title,
+    String? title,
     String? description,
     required List<Widget> fields,
     required VoidCallback onNext,
     String buttonText = 'Continue',
+    bool isLastStep = false,
+    bool Function()? isButtonEnabled,
   }) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12.0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center, // Centered the whole column
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // const SizedBox(height: 20), // Removed this SizedBox
+          const SizedBox(height: 20),
+
+          if (title != null)
+            Text(
+              title,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+
+          if (title != null) const SizedBox(height: 24),
 
           if (description != null)
             Padding(
@@ -289,20 +308,71 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     ?.copyWith(color: AppColors.textSecondary),
               ),
             ),
-          const SizedBox(height: 48), // Changed back to 48
+          if (description != null) const SizedBox(height: 24),
 
           ...fields,
 
-          const SizedBox(height: 48),
+          const Spacer(),
 
-          _isLoading
-              ? const Center(
-                  child: CupertinoActivityIndicator(radius: 16.0),
-                )
-              : AppleButton(
-                  text: buttonText,
-                  onPressed: onNext,
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16.0),
+            child: RichText(
+              textAlign: TextAlign.center,
+              text: const TextSpan(
+                style: TextStyle(
+                  color: AppColors.textTertiary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
                 ),
+                children: [
+                  TextSpan(text: 'By continuing, you agree to our\n'),
+                  TextSpan(
+                    text: 'Privacy Policy',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  TextSpan(text: ' and '),
+                  TextSpan(
+                    text: 'Terms of Service',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.only(bottom: 24.0),
+            child: _isLoading
+                ? const Center(
+                    child: CupertinoActivityIndicator(radius: 16.0),
+                  )
+                : GestureDetector(
+                    onTap: (isButtonEnabled != null && isButtonEnabled())
+                        ? onNext
+                        : null,
+                    child: Container(
+                      width: double.infinity,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: (isButtonEnabled != null && isButtonEnabled())
+                            ? Colors.white
+                            : Colors.white.withValues(alpha: 0.4),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        buttonText,
+                        style: TextStyle(
+                          color: (isButtonEnabled != null && isButtonEnabled())
+                              ? Colors.black
+                              : Colors.black.withValues(alpha: 0.4),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
         ],
       ),
     );

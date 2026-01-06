@@ -27,25 +27,11 @@ class CustomCupertinoTextField extends StatefulWidget {
 
 class _CustomCupertinoTextFieldState extends State<CustomCupertinoTextField> {
   late bool _obscureText;
-  bool _isFocused = false;
 
   @override
   void initState() {
     super.initState();
     _obscureText = widget.obscureText;
-    widget.focusNode.addListener(_onFocusChange);
-  }
-
-  @override
-  void dispose() {
-    widget.focusNode.removeListener(_onFocusChange);
-    super.dispose();
-  }
-
-  void _onFocusChange() {
-    setState(() {
-      _isFocused = widget.focusNode.hasFocus;
-    });
   }
 
   @override
@@ -67,63 +53,37 @@ class _CustomCupertinoTextFieldState extends State<CustomCupertinoTextField> {
         //     ),
         //   ),
         // ],
-        AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
+        Container(
           decoration: BoxDecoration(
-            color: const Color(0xFF1C1C1E),
-            borderRadius: BorderRadius.circular(12),
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
             border: Border.all(
-              color: _isFocused
-                  ? AppColors.primary
-                  : AppColors.textTertiary.withValues(alpha: 0.2),
-              width: _isFocused ? 2 : 1,
+              color: AppColors.textTertiary.withValues(alpha: 0.3),
+              width: 1,
             ),
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: CupertinoTextField(
-                  controller: widget.controller,
-                  focusNode: widget.focusNode,
-                  obscureText: _obscureText,
-                  keyboardType: widget.keyboardType,
-                  style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w400,
-                  ),
-                  placeholder: widget.hintText,
-                  placeholderStyle: const TextStyle(
-                    color: AppColors.textTertiary,
-                    fontSize: 14,
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 12,
-                    horizontal: 16,
-                  ),
-                  cursorColor: AppColors.primary,
-                  keyboardAppearance: Brightness.dark,
-                  decoration: null,
-                ),
-              ),
-              if (widget.obscureText)
-                CupertinoButton(
-                  padding: const EdgeInsets.only(right: 12),
-                  onPressed: () {
-                    setState(() {
-                      _obscureText = !_obscureText;
-                    });
-                  },
-                  child: Text(
-                    _obscureText ? 'SHOW' : 'HIDE',
-                    style: const TextStyle(
-                      color: AppColors.textTertiary, // Changed to a grey shade
-                      fontSize: 12, // Made even smaller
-                      fontWeight: FontWeight.bold, // Made bolder
-                    ),
-                  ),
-                ),
-            ],
+          child: CupertinoTextField(
+            controller: widget.controller,
+            focusNode: widget.focusNode,
+            obscureText: _obscureText,
+            keyboardType: widget.keyboardType,
+            style: const TextStyle(
+              color: AppColors.textPrimary,
+              fontSize: 14,
+              fontWeight: FontWeight.w400,
+            ),
+            placeholder: widget.hintText,
+            placeholderStyle: const TextStyle(
+              color: AppColors.textTertiary,
+              fontSize: 14,
+            ),
+            padding: const EdgeInsets.symmetric(
+              vertical: 18,
+              horizontal: 16,
+            ),
+            cursorColor: AppColors.primary,
+            keyboardAppearance: Brightness.dark,
+            decoration: null,
           ),
         ),
       ],

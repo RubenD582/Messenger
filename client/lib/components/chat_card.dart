@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:client/components/modern_avatar.dart';
 import 'package:client/theme/colors.dart';
 import 'package:client/theme/spacing.dart';
-import 'package:client/theme/typography.dart';
 
 class ChatCard extends StatelessWidget {
   final String? avatarUrl;
@@ -92,9 +91,10 @@ class ChatCard extends StatelessWidget {
                               Flexible(
                                 child: Text(
                                   name,
-                                  style: AppTypography.body.copyWith(
+                                  style: const TextStyle(
                                     fontWeight: FontWeight.w700,
                                     color: AppColors.textPrimary,
+                                    fontSize: 16,
                                   ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
@@ -108,10 +108,11 @@ class ChatCard extends StatelessWidget {
                         if (timestamp != null)
                           Text(
                             timestamp!,
-                            style: AppTypography.caption.copyWith(
+                            style: TextStyle(
                               color: unreadCount > 0
                                   ? AppColors.primary
                                   : AppColors.textTertiary,
+                              fontSize: 12,
                             ),
                           ),
                       ],
@@ -128,8 +129,9 @@ class ChatCard extends StatelessWidget {
                               ? _buildTypingIndicator()
                               : Text(
                                   lastMessage ?? 'Tap to send a message',
-                                  style: AppTypography.bodySmall.copyWith(
+                                  style: TextStyle(
                                     color: AppColors.textSecondary,
+                                    fontSize: 14,
                                     fontWeight: unreadCount > 0
                                         ? FontWeight.w600
                                         : FontWeight.w400,
@@ -158,7 +160,7 @@ class ChatCard extends StatelessWidget {
                             child: Center(
                               child: Text(
                                 unreadCount > 99 ? '99+' : unreadCount.toString(),
-                                style: AppTypography.caption.copyWith(
+                                style: const TextStyle(
                                   color: AppColors.textPrimary,
                                   fontWeight: FontWeight.w700,
                                   fontSize: 11,
@@ -181,10 +183,11 @@ class ChatCard extends StatelessWidget {
   Widget _buildTypingIndicator() {
     return Row(
       children: [
-        Text(
+        const Text(
           'typing',
-          style: AppTypography.bodySmall.copyWith(
+          style: TextStyle(
             color: AppColors.typing,
+            fontSize: 14,
             fontStyle: FontStyle.italic,
           ),
         ),

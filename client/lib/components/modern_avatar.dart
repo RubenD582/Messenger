@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:client/theme/colors.dart';
 import 'package:client/theme/spacing.dart';
-import 'package:client/theme/typography.dart';
 
 class ModernAvatar extends StatefulWidget {
   final String? imageUrl;
@@ -177,9 +176,10 @@ class _ModernAvatarState extends State<ModernAvatar> with SingleTickerProviderSt
     return Center(
       child: Text(
         _getInitials().toUpperCase(),
-        style: AppTypography.h3.copyWith(
+        style: TextStyle(
           fontSize: fontSize,
           color: AppColors.textPrimary,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );

@@ -54,6 +54,14 @@ class _HomeState extends State<Home> {
   late String uuid;
   final LocationService _locationService = LocationService();
 
+  // Message state
+  Map<String, int> _unreadCounts = {}; // conversationId -> unread count
+  Map<String, bool> _typingStatus = {}; // conversationId -> is typing
+  Map<String, String> _lastMessages = {}; // conversationId -> last message text
+  late StreamSubscription<Map<String, dynamic>> _newMessageSubscription;
+  late StreamSubscription<Map<String, dynamic>> _typingIndicatorSubscription;
+  late StreamSubscription<Map<String, dynamic>> _readReceiptSubscription;
+
   @override
   void initState() {
     super.initState();
@@ -68,7 +76,10 @@ class _HomeState extends State<Home> {
 
       // Open the Hive box first
       _openFriendsBox().then((_) {
-        fetchFriends();
+        fetchFriends().then((_) {
+          // Fetch unread counts after friends are loaded
+          _fetchUnreadCounts();
+        });
       });
 
       // Load statuses
@@ -76,6 +87,9 @@ class _HomeState extends State<Home> {
 
       // Setup status WebSocket listeners
       _setupStatusListeners();
+
+      // Setup message WebSocket listeners
+      _setupMessageListeners();
 
       // Update location on app launch/login
       _updateLocationOnLaunch();
@@ -256,14 +270,7 @@ class _HomeState extends State<Home> {
       final myStatusesData = await apiService.getMyStatuses();
       _myStatuses = myStatusesData.map((data) => Status.fromJson(data)).toList();
 
-      if (kDebugMode) {
-        print('📊 Loaded ${_myStatuses.length} of my statuses:');
-        for (var i = 0; i < _myStatuses.length; i++) {
-          final text = _myStatuses[i].textContent;
-          final preview = text.length > 20 ? text.substring(0, 20) : text;
-          print('  [$i] ID: ${_myStatuses[i].id}, Text: $preview...');
-        }
-      }
+
 
       // Load friend statuses and mark as viewed based on local storage
       final friendStatusesData = await apiService.getFriendStatuses();
@@ -300,6 +307,83 @@ class _HomeState extends State<Home> {
     });
   }
 
+  void _setupMessageListeners() {
+    // Listen for new messages
+    _newMessageSubscription = apiService.newMessageStream.listen((data) {
+      if (kDebugMode) {
+        print('New message received: $data');
+      }
+
+      // Update unread count and last message for the conversation
+      final conversationId = data['conversationId'] as String?;
+      final senderId = data['senderId'] as String?;
+      final message = data['message'] as String?;
+
+      if (conversationId != null && message != null) {
+        setState(() {
+          // Store the last message text
+          _lastMessages[conversationId] = message;
+
+          // Only increment unread count if the message is from someone else
+          if (senderId != null && senderId != uuid) {
+            _unreadCounts[conversationId] = (_unreadCounts[conversationId] ?? 0) + 1;
+          }
+        });
+      }
+    });
+
+    // Listen for typing indicators
+    _typingIndicatorSubscription = apiService.typingIndicatorStream.listen((data) {
+      if (kDebugMode) {
+        print('Typing indicator received: $data');
+      }
+
+      final conversationId = data['conversationId'] as String?;
+      final isTyping = data['isTyping'] as bool? ?? false;
+
+      if (conversationId != null) {
+        setState(() {
+          _typingStatus[conversationId] = isTyping;
+        });
+      }
+    });
+
+    // Listen for read receipts
+    _readReceiptSubscription = apiService.readReceiptStream.listen((data) {
+      if (kDebugMode) {
+        print('Read receipt received: $data');
+      }
+
+      final conversationId = data['conversationId'] as String?;
+
+      if (conversationId != null) {
+        setState(() {
+          _unreadCounts[conversationId] = 0;
+        });
+      }
+    });
+  }
+
+  Future<void> _fetchUnreadCounts() async {
+    try {
+      // Initialize unread counts to 0 for all friends
+      // Real-time updates will come from WebSocket events
+      for (var friend in _friends) {
+        final conversationId = _getConversationId(uuid, friend['friend_id']);
+
+        if (!_unreadCounts.containsKey(conversationId)) {
+          setState(() {
+            _unreadCounts[conversationId] = 0;
+          });
+        }
+      }
+    } catch (error) {
+      if (kDebugMode) {
+        print('Error initializing unread counts: $error');
+      }
+    }
+  }
+
   void _openStatusCreationScreen(GlobalKey statusCircleKey) {
     // Get the position of the status circle
     final RenderBox? renderBox = statusCircleKey.currentContext?.findRenderObject() as RenderBox?;
@@ -328,6 +412,9 @@ class _HomeState extends State<Home> {
     _pendingFriendRequestsSubscription.cancel();
     _statusCreatedSubscription.cancel();
     _statusDeletedSubscription.cancel();
+    _newMessageSubscription.cancel();
+    _typingIndicatorSubscription.cancel();
+    _readReceiptSubscription.cancel();
     apiService.disconnectWebSocket();
 
     _scrollController.dispose();
@@ -360,55 +447,38 @@ class _HomeState extends State<Home> {
             automaticallyImplyLeading: false,
             flexibleSpace: Builder(
               builder: (context) {
-                // Animate text size and alignment based on scroll offset
-                double textSize = 32;
-                // double textSize = 50 - (_scrollOffset * 0.2).clamp(18.0, 22.0);
-                // double textAlignment = (_scrollOffset > 30) ? 0.0 : 1.0; // Move the text to the center when scrolling
-
-                return ClipRect(
-                  child: BackdropFilter(
-                    filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.black.withAlpha(175),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.end,
+                return Container(
+                  decoration: const BoxDecoration(
+                    color: AppColors.background,
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
+                            const Text(
+                              "Messages",
+                              textAlign: TextAlign.left,
+                              style: TextStyle(
+                                color: AppColors.textPrimary,
+                                fontSize: 36,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                             Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Align(
-                                  // alignment: Alignment(0.0, textAlignment),  // Center the text on scroll
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(bottom: 0),
-                                    child: Text(
-                                      "Messages",
-                                      textAlign: TextAlign.left,
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: textSize,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: -0.5,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Row(
-                                  children: [
-                                    _iconButton(Icons.more_horiz, Colors.white.withAlpha(50), _showSearchModal),
-                                    const SizedBox(width: 10),
-                                    _iconButton(Icons.add, Color(0xFF5856D6), _showSearchModal),
-                                  ],
-                                ),
+                                _iconButton(Icons.more_horiz, Colors.white.withAlpha(50), _showSearchModal),
+                                const SizedBox(width: 10),
+                                _iconButton(Icons.add, const Color(0xFF5856D6), _showSearchModal),
                               ],
                             ),
                           ],
                         ),
-                      ),
+                      ],
                     ),
                   ),
                 );
@@ -419,35 +489,43 @@ class _HomeState extends State<Home> {
           // **Sticky Search Header**
           SliverStickyHeader(
             header: Container(
-              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              color: Colors.black,
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+              decoration: const BoxDecoration(
+                color: AppColors.background,
+              ),
               child: Transform.translate(
                 offset: Offset(
-                  0, 
+                  0,
                   _scrollYOffset
                 ),
-      
+
                 child: CupertinoSearchTextField(
                   controller: _searchController,
-                  placeholder: "Search",
-                  placeholderStyle: TextStyle(
+                  placeholder: "Search conversations",
+                  placeholderStyle: const TextStyle(
                     color: AppColors.textTertiary,
-                    fontSize: 16,
+                    fontSize: 15,
                     fontWeight: FontWeight.w400,
                   ),
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 15,
                     fontWeight: FontWeight.w400,
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
-                  backgroundColor: AppColors.surfaceVariant,
-                  itemColor: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  itemColor: Colors.white.withValues(alpha: 0.6),
+                  decoration: BoxDecoration(
+                    color: Colors.transparent,
+                    border: Border.all(
+                      color: AppColors.textTertiary.withValues(alpha: 0.3),
+                      width: 1,
+                    ),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
                   onChanged: (value) {},
                   onSubmitted: (value) {},
                   prefixIcon: Padding(
-                    padding: const EdgeInsets.only(left: 6),
+                    padding: const EdgeInsets.only(left: 8),
                     child: Icon(
                       CupertinoIcons.search,
                       color: AppColors.textTertiary,
@@ -465,7 +543,7 @@ class _HomeState extends State<Home> {
                 _scrollYOffset * 0.75
               ),
                 child: Container(
-                  padding: EdgeInsets.only(left: 10, right: 10, top: 8, bottom: 8),
+                  padding: const EdgeInsets.only(left: 12, right: 12, top: 8, bottom: 8),
                   child: AnimatedOpacity(
                     opacity: 1 - _scrollYOpacity,
                     duration: Duration(milliseconds: 200),
@@ -510,9 +588,8 @@ class _HomeState extends State<Home> {
               ),
             ),
 
-          const SliverToBoxAdapter(
-            child: SizedBox(height: 10),
-          ),
+
+
 
           // **Friend List / Requests**
           SliverToBoxAdapter(
@@ -568,19 +645,16 @@ class _HomeState extends State<Home> {
           var user = _friends[index];
           String profilePicture = 'assets/noprofile.png';
 
-          // Mock data for demo (replace with real data from backend)
+          // Get conversation ID for this friend
+          final conversationId = _getConversationId(uuid, user['friend_id']);
+
+          // Real data from WebSocket streams
+          final bool isTyping = _typingStatus[conversationId] ?? false;
+          final int unreadCount = _unreadCounts[conversationId] ?? 0;
+
+          // Mock data for features not yet implemented
           final bool isOnline = index % 3 == 0; // Mock: every 3rd user is online
-          final bool isTyping = index == 0; // Mock: first user is typing
-          final int unreadCount = index % 5 == 0 ? (index % 10) + 1 : 0; // Mock unread count
-          final String lastMessage = isTyping
-              ? ''
-              : index % 4 == 0
-                  ? 'Hey! How are you doing? 😊'
-                  : index % 4 == 1
-                      ? 'See you tomorrow!'
-                      : index % 4 == 2
-                          ? 'Thanks for the help!'
-                          : 'Sounds good!';
+          final String lastMessage = _lastMessages[conversationId] ?? 'Tap to send a message';
           final String timestamp = index % 6 == 0
               ? 'Just now'
               : index % 6 == 1
@@ -593,31 +667,31 @@ class _HomeState extends State<Home> {
                               ? 'Tuesday'
                               : 'Monday';
 
-          return Dismissible(
-            key: Key(user['id'].toString()),
-            direction: DismissDirection.horizontal,
-            onDismissed: (direction) {
-              if (direction == DismissDirection.endToStart) {
-                // Delete action
-              } else if (direction == DismissDirection.startToEnd) {
-                // Pin action
-              }
-            },
-            background: Container(
-              color: Color(0xFF5856D6),
-              alignment: Alignment.centerLeft,
-              padding: EdgeInsets.only(left: 20),
-              child: Icon(Icons.push_pin, color: Colors.white, size: 24),
-            ),
-            secondaryBackground: Container(
-              color: Color(0xFFFF3B30),
-              alignment: Alignment.centerRight,
-              padding: EdgeInsets.only(right: 20),
-              child: Icon(Icons.delete, color: Colors.white, size: 24),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: InkWell(
+          return Column(
+            children: [
+              Dismissible(
+                key: Key(user['id'].toString()),
+                direction: DismissDirection.horizontal,
+                onDismissed: (direction) {
+                  if (direction == DismissDirection.endToStart) {
+                    // Delete action
+                  } else if (direction == DismissDirection.startToEnd) {
+                    // Pin action
+                  }
+                },
+                background: Container(
+                  color: Color(0xFF5856D6),
+                  alignment: Alignment.centerLeft,
+                  padding: EdgeInsets.only(left: 20),
+                  child: Icon(Icons.push_pin, color: Colors.white, size: 20, weight: 300),
+                ),
+                secondaryBackground: Container(
+                  color: Color(0xFFFF3B30),
+                  alignment: Alignment.centerRight,
+                  padding: EdgeInsets.only(right: 20),
+                  child: Icon(Icons.delete, color: Colors.white, size: 24),
+                ),
+                child: InkWell(
                   onTap: () {
                     final conversationId = _getConversationId(uuid, user['friend_id']);
                     Navigator.push(
@@ -632,121 +706,95 @@ class _HomeState extends State<Home> {
                       ),
                     );
                   },
-                  child: Row(
-                    children: [
-                      // Profile picture with online status
-                      Stack(
-                        children: [
-                          CircleAvatar(
-                            radius: 24,
-                            backgroundImage: AssetImage(profilePicture),
-                          ),
-                          if (isOnline)
-                            Positioned(
-                              right: 0,
-                              bottom: 0,
-                              child: Container(
-                                width: 16,
-                                height: 16,
-                                decoration: BoxDecoration(
-                                  color: Color(0xFF30D158),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.black, width: 2.5),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    child: Row(
+                      children: [
+                        // Profile picture with online status
+                        Stack(
+                          children: [
+                            CircleAvatar(
+                              radius: 24,
+                              backgroundColor: Color(0xFF2C2C2E),
+                              backgroundImage: AssetImage(profilePicture),
+                            ),
+                            if (isOnline)
+                              Positioned(
+                                right: 0,
+                                bottom: 0,
+                                child: Container(
+                                  width: 14,
+                                  height: 14,
+                                  decoration: BoxDecoration(
+                                    color: Color(0xFF30D158),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: AppColors.background, width: 2),
+                                  ),
                                 ),
                               ),
-                            ),
-                        ],
-                      ),
-                      SizedBox(width: 12),
-                      // Message info
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  '${user['first_name']} ${user['last_name']}',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: unreadCount > 0 ? FontWeight.w700 : FontWeight.w600,
-                                    fontSize: 16,
-                                    letterSpacing: -0.3,
-                                  ),
-                                ),
-                                Text(
-                                  timestamp,
-                                  style: TextStyle(
-                                    color: unreadCount > 0
-                                        ? Color(0xFF5856D6)
-                                        : Color(0xFF76767B),
-                                    fontSize: 13,
-                                    fontWeight: unreadCount > 0 ? FontWeight.w600 : FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            SizedBox(height: 2),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: isTyping
-                                      ? Row(
-                                          children: [
-                                            Text(
-                                              'Typing...',
-                                              style: TextStyle(
-                                                color: Color(0xFF30D158),
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                            ),
-                                            SizedBox(width: 4),
-                                          ],
-                                        )
-                                      : Text(
-                                          lastMessage,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            color: unreadCount > 0
-                                                ? Color(0xFFD1D1D6)
-                                                : Color(0xFF76767B),
-                                            fontSize: 14,
-                                            fontWeight: unreadCount > 0 ? FontWeight.w500 : FontWeight.w400,
-                                          ),
-                                        ),
-                                ),
-                                if (unreadCount > 0) ...[
-                                  SizedBox(width: 8),
-                                  Container(
-                                    padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Color(0xFF5856D6),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    constraints: BoxConstraints(minWidth: 20),
-                                    child: Text(
-                                      unreadCount > 9 ? '9+' : unreadCount.toString(),
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
                           ],
                         ),
-                      ),
-                    ],
+                        SizedBox(width: 12),
+                        // Message info
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      '${user['first_name']} ${user['last_name']}',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 16,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (!isTyping) ...[
+                                    SizedBox(width: 8),
+                                    Text(
+                                      timestamp,
+                                      style: TextStyle(
+                                        color: Color(0xFF8E8E93),
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              SizedBox(height: 0),
+                              isTyping
+                                  ? Text(
+                                      'Typing...',
+                                      style: TextStyle(
+                                        color: Color(0xFF30D158),
+                                        fontSize: 14,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    )
+                                  : Text(
+                                      lastMessage,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: Color(0xFF8E8E93),
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
+            ],
           );
         },
       ),
@@ -765,7 +813,7 @@ class _HomeState extends State<Home> {
           ),
           SizedBox(height: 16),
           Text(
-            'No messages yet',
+            'Tap to send a message',
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.6),
               fontSize: 20,
@@ -809,10 +857,11 @@ class _HomeState extends State<Home> {
     final uniqueFriendStatuses = groupedStatuses.values.toList();
 
     return Container(
-      height: 80,
+      height: 100,
+      padding: EdgeInsets.symmetric(vertical: 12),
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 16),
         itemCount: 1 + uniqueFriendStatuses.length, // "Your Story" + unique friends
         itemBuilder: (context, index) {
           final isYou = index == 0;
@@ -821,7 +870,7 @@ class _HomeState extends State<Home> {
             // "Your Story" circle
             final yourStoryKey = GlobalKey();
             return Padding(
-              padding: const EdgeInsets.only(right: 6),
+              padding: const EdgeInsets.only(right: 12),
               child: GestureDetector(
                 onTap: () {
                   if (hasMyStatus) {
@@ -1038,8 +1087,8 @@ class _HomeState extends State<Home> {
                       name,
                       style: TextStyle(
                         color: isSelected ? Colors.white : Color(0xFFFFFFFF).withAlpha(150),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
                         letterSpacing: -0.3,
                       ),
                     ),

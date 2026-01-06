@@ -4,9 +4,7 @@ import 'package:client/screens/auth/reset_password_screen.dart';   // Import Res
 import 'package:client/services/notification_service.dart';
 import 'package:client/database/message_database.dart';
 import 'package:client/theme/colors.dart';
-import 'package:client/theme/typography.dart';
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
@@ -51,18 +49,7 @@ class MyApp extends StatelessWidget {
           onError: AppColors.textPrimary,
         ),
 
-        // Typography
-        textTheme: TextTheme(
-          displayLarge: AppTypography.h1,
-          displayMedium: AppTypography.h2,
-          displaySmall: AppTypography.h3,
-          bodyLarge: AppTypography.bodyLarge,
-          bodyMedium: AppTypography.body,
-          bodySmall: AppTypography.bodySmall,
-          labelLarge: AppTypography.button,
-          labelMedium: AppTypography.label,
-          labelSmall: AppTypography.caption,
-        ),
+        // Typography - using default theme
 
 
         // Card theme
@@ -73,11 +60,10 @@ class MyApp extends StatelessWidget {
         ),
 
         // App bar theme
-        appBarTheme: AppBarTheme(
+        appBarTheme: const AppBarTheme(
           backgroundColor: AppColors.background,
           foregroundColor: AppColors.textPrimary,
           elevation: 0,
-          titleTextStyle: AppTypography.h3,
         ),
 
         // Input decoration theme
@@ -109,14 +95,12 @@ class MyApp extends StatelessWidget {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
-            textStyle: AppTypography.button,
           ),
         ),
         textButtonTheme: TextButtonThemeData(
           style: TextButton.styleFrom(
             foregroundColor: AppColors.primary,
             splashFactory: InkRipple.splashFactory,
-            textStyle: AppTypography.button,
           ),
         ),
 
@@ -134,9 +118,7 @@ class MyApp extends StatelessWidget {
             routeTheme: PullDownMenuRouteTheme(
               backgroundColor: AppColors.surface,
             ),
-            itemTheme: PullDownMenuItemTheme(
-              textStyle: AppTypography.body,
-            ),
+            itemTheme: const PullDownMenuItemTheme(),
             dividerTheme: PullDownMenuDividerTheme(
               dividerColor: AppColors.textTertiary.withValues(alpha: 0.2),
             ),

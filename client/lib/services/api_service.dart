@@ -599,14 +599,7 @@ class ApiService {
         final data = json.decode(response.body);
         final statuses = List<Map<String, dynamic>>.from(data['statuses']);
 
-        if (kDebugMode) {
-          print('🌐 API returned ${statuses.length} statuses from /statuses/me');
-          for (var i = 0; i < statuses.length; i++) {
-            final text = statuses[i]['textContent'].toString();
-            final preview = text.length > 20 ? text.substring(0, 20) : text;
-            print('  [$i] ID: ${statuses[i]['id']}, Text: $preview...');
-          }
-        }
+
 
         return statuses;
       } else {

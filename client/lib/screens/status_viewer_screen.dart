@@ -452,14 +452,7 @@ class _StatusViewerScreenState extends State<StatusViewerScreen> with SingleTick
 
   @override
   Widget build(BuildContext context) {
-    if (kDebugMode) {
-      print('🎨 Building StatusViewerScreen:');
-      print('   _statuses.length = ${_statuses.length}');
-      print('   _currentIndex = $_currentIndex');
-      for (var i = 0; i < _statuses.length; i++) {
-        print('   Status $i: ID=${_statuses[i].id}, Text=${_statuses[i].textContent.substring(0, _statuses[i].textContent.length > 30 ? 30 : _statuses[i].textContent.length)}');
-      }
-    }
+
 
     // If list is empty, show empty container (will be popped shortly)
     if (_statuses.isEmpty) {
@@ -535,10 +528,7 @@ class _StatusViewerScreenState extends State<StatusViewerScreen> with SingleTick
                   }
                 },
                 itemBuilder: (context, index) {
-                  if (kDebugMode) {
-                    print('   🏗️  Building PageView item at index $index');
-                  }
-                  final status = _statuses[index];
+                                    final status = _statuses[index];
                   final colorHex = status.backgroundColor.replaceFirst('#', '');
                   final color = Color(int.parse('FF$colorHex', radix: 16));
 
@@ -575,9 +565,7 @@ class _StatusViewerScreenState extends State<StatusViewerScreen> with SingleTick
                         padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
                         child: Row(
                           children: List.generate(_statuses.length, (index) {
-                            if (kDebugMode) {
-                              print('   📊 Generating progress bar $index for status ${_statuses[index].id}');
-                            }
+
                             return Expanded(
                               child: Container(
                                 height: 3,
@@ -599,6 +587,8 @@ class _StatusViewerScreenState extends State<StatusViewerScreen> with SingleTick
                           }),
                         ),
                       ),
+
+                      const SizedBox(height: 10.0), // Added spacing
 
                       // User info and close button
                       Padding(
@@ -627,7 +617,7 @@ class _StatusViewerScreenState extends State<StatusViewerScreen> with SingleTick
                                     style: const TextStyle(
                                       color: Colors.white60,
                                       fontWeight: FontWeight.w600,
-                                      fontSize: 12,
+                                      fontSize: 13,
                                     ),
                                   ),
                                 ],

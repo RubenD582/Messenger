@@ -201,9 +201,7 @@ class AuthService {
   static Future<String?> getToken() async {
     // Retrieve token from secure storage
     final token = await _secureStorage.read(key: 'auth_token');
-    if (kDebugMode && token != null) {
-      print('AUTSERVICE: Access token retrieved from secure storage');
-    }
+
     return token;
   }
 

@@ -78,26 +78,25 @@ class _PendingRequestsScreenState extends State<PendingRequestsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: _isLoading
-          ? Center(child: CupertinoActivityIndicator(color: Colors.white,))
-          : _pendingRequests.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.max,
-                    children: [
-                      Text(
-                        ""
-                      ),
-                    ],
-                  ),
-                )
-              : ListView.builder(
-                physics: NeverScrollableScrollPhysics(),
-                itemCount: _pendingRequests.length,
-                itemBuilder: (context, index) {
+    return _isLoading
+        ? Center(child: CupertinoActivityIndicator(color: Colors.white,))
+        : _pendingRequests.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.max,
+                  children: [
+                    Text(
+                      ""
+                    ),
+                  ],
+                ),
+              )
+            : ListView.builder(
+              shrinkWrap: true,
+              physics: NeverScrollableScrollPhysics(),
+              itemCount: _pendingRequests.length,
+              itemBuilder: (context, index) {
                   var user = _pendingRequests[index];
                   String profilePicture = 'assets/noprofile.png';
 
@@ -185,7 +184,6 @@ class _PendingRequestsScreenState extends State<PendingRequestsScreen> {
                     ),
                   );
                 },
-              )
-    );
+              );
   }
 }

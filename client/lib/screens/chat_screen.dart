@@ -4,13 +4,11 @@ import 'dart:math';
 
 import 'package:client/database/message_database.dart';
 import 'package:client/models/message.dart';
-import 'package:client/screens/user_profile.dart';
 import 'package:client/services/api_service.dart';
 import 'package:client/services/auth_service.dart';
 import 'package:client/services/chat_service.dart';
 import 'package:client/services/chat_service_with_storage.dart';
 import 'package:client/theme/colors.dart';
-import 'package:client/theme/typography.dart';
 import 'package:client/theme/spacing.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
@@ -419,6 +417,21 @@ class _ChatScreenState extends State<ChatScreen> {
       }
 
       _scrollToBottom();
+
+      // Mark messages as read when opening the chat
+      if (_messages.isNotEmpty) {
+        final lastSeq = _messages.last.sequenceId;
+        try {
+          await _chatService.markAsRead(lastSeq);
+          if (kDebugMode) {
+            print('✅ Marked messages as read up to sequence: $lastSeq');
+          }
+        } catch (e) {
+          if (kDebugMode) {
+            print('❌ Error marking messages as read: $e');
+          }
+        }
+      }
     } catch (error) {
       if (kDebugMode) {
         print('❌ Error loading initial messages: $error');
@@ -1054,12 +1067,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
         title: GestureDetector(
           onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const UserProfileScreen(),
-              ),
-            );
+            // TODO: Navigate to user profile
           },
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
@@ -1081,9 +1089,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     children: [
                       Text(
                         widget.friendName,
-                        style: AppTypography.h3.copyWith(
+                        style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w600,
+                          fontSize: 20,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -3008,7 +3017,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _buildTextInput() {
     return TextField(
       controller: _messageController,
-      style: AppTypography.body.copyWith(color: Colors.white),
+      style: const TextStyle(color: Colors.white, fontSize: 16),
       cursorColor: const Color(0xFF5856D6),
       onChanged: (text) {
         // Trigger rebuild to update send button state
@@ -3023,9 +3032,10 @@ class _ChatScreenState extends State<ChatScreen> {
       },
       decoration: InputDecoration(
         hintText: 'Message...',
-        hintStyle: AppTypography.body.copyWith(
+        hintStyle: TextStyle(
           color: AppColors.textTertiary.withValues(alpha: 0.7),
           fontWeight: FontWeight.w500,
+          fontSize: 16,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(100),
@@ -3720,7 +3730,7 @@ class _MessageBubble extends StatelessWidget {
                 ),
                 child: Text(
                   message.message,
-                  style: AppTypography.body.copyWith(
+                  style: TextStyle(
                     color: isMe ? Colors.white : AppColors.textPrimary,
                     fontSize: 15,
                     height: 1.4,
@@ -4983,7 +4993,7 @@ class _GiftMessageWidgetState extends State<_GiftMessageWidget>
                   ),
                   child: Text(
                     widget.message.message,
-                    style: AppTypography.body.copyWith(
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 15,
                       height: 1.4,
@@ -5174,7 +5184,7 @@ class _LoveMessageWidgetState extends State<_LoveMessageWidget>
             ),
             child: Text(
               widget.message.message,
-              style: AppTypography.body.copyWith(
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 15,
                 height: 1.4,

@@ -251,11 +251,13 @@ router.delete("/conversation/:conversationId", authenticateToken, async (req, re
     const redis = require('../config/redisClient');
     const sequenceId = await redis.incr(`conversation_seq:${conversationId}`);
 
+    // Use ON CONFLICT DO NOTHING to avoid duplicate key errors
     await db.query(`
       INSERT INTO chats (
         message_id, conversation_id, sender_id, receiver_id,
         message, sequence_id, timestamp, message_type, metadata
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      ON CONFLICT (conversation_id, sequence_id) DO NOTHING
     `, [
       systemMessageId,
       conversationId,
@@ -338,6 +340,112 @@ router.get("/conversations", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Error fetching conversations:", error);
     res.status(500).json({ message: "Failed to fetch conversations" });
+  }
+});
+
+// Sync endpoint - fetch missed updates for a conversation
+router.get("/sync/:conversationId", authenticateToken, async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { after } = req.query; // ISO timestamp of last sync
+    const userId = req.user.userId;
+
+    console.log(`🔄 Sync request for ${conversationId} after ${after || 'beginning'}`);
+
+    // Verify user is part of this conversation
+    const [user1, user2] = conversationId.split('_').sort();
+    if (userId !== user1 && userId !== user2) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    // Get messages after the specified timestamp
+    const messagesQuery = after
+      ? `SELECT
+          message_id, conversation_id, sender_id, receiver_id,
+          message, sequence_id, timestamp, message_type, metadata,
+          read_at, delivered_at, is_positioned, position_x, position_y,
+          positioned_by, positioned_at, rotation, scale
+         FROM chats
+         WHERE conversation_id = $1
+           AND timestamp > $2
+           AND deleted_at IS NULL
+         ORDER BY sequence_id ASC`
+      : `SELECT
+          message_id, conversation_id, sender_id, receiver_id,
+          message, sequence_id, timestamp, message_type, metadata,
+          read_at, delivered_at, is_positioned, position_x, position_y,
+          positioned_by, positioned_at, rotation, scale
+         FROM chats
+         WHERE conversation_id = $1
+           AND deleted_at IS NULL
+         ORDER BY sequence_id ASC`;
+
+    const messagesParams = after ? [conversationId, after] : [conversationId];
+    const messages = await db.query(messagesQuery, messagesParams);
+
+    // Get deleted message IDs since last sync
+    const deletedQuery = after
+      ? `SELECT message_id, deleted_at
+         FROM chats
+         WHERE conversation_id = $1
+           AND deleted_at IS NOT NULL
+           AND deleted_at > $2`
+      : `SELECT message_id, deleted_at
+         FROM chats
+         WHERE conversation_id = $1
+           AND deleted_at IS NOT NULL`;
+
+    const deletedParams = after ? [conversationId, after] : [conversationId];
+    const deleted = await db.query(deletedQuery, deletedParams);
+
+    // Check if chat was cleared (look for system message with chat_cleared action)
+    const chatClearedQuery = after
+      ? `SELECT metadata, timestamp
+         FROM chats
+         WHERE conversation_id = $1
+           AND message_type = 'system'
+           AND metadata::json->>'action' = 'chat_cleared'
+           AND timestamp > $2
+         ORDER BY timestamp DESC
+         LIMIT 1`
+      : null;
+
+    let chatCleared = false;
+    let chatClearedAt = null;
+
+    if (chatClearedQuery && after) {
+      const clearedResult = await db.query(chatClearedQuery, [conversationId, after]);
+      if (clearedResult.rows.length > 0) {
+        chatCleared = true;
+        chatClearedAt = clearedResult.rows[0].timestamp;
+      }
+    }
+
+    // Get last sequence ID
+    const lastSeqResult = await db.query(
+      `SELECT MAX(sequence_id) as last_seq
+       FROM chats
+       WHERE conversation_id = $1
+         AND deleted_at IS NULL`,
+      [conversationId]
+    );
+
+    const lastSequenceId = lastSeqResult.rows[0]?.last_seq || 0;
+
+    console.log(`✅ Sync for ${conversationId}: ${messages.rows.length} messages, ${deleted.rows.length} deleted, cleared: ${chatCleared}`);
+
+    res.json({
+      messages: messages.rows,
+      deletedMessageIds: deleted.rows.map(r => r.message_id),
+      chatCleared,
+      chatClearedAt,
+      lastSequenceId,
+      syncTimestamp: new Date().toISOString(),
+    });
+
+  } catch (error) {
+    console.error("Error syncing conversation:", error);
+    res.status(500).json({ message: "Failed to sync conversation" });
   }
 });
 

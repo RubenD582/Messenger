@@ -101,13 +101,11 @@ class _OtpPinFieldState extends State<OtpPinField> {
       width: widget.fieldWidth,
       height: widget.fieldHeight,
       decoration: BoxDecoration(
-        color: AppColors.surfaceVariant,
-        borderRadius: BorderRadius.circular(12.0),
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(16.0),
         border: Border.all(
-          color: _focusNodes[index].hasFocus
-              ? AppColors.primary
-              : AppColors.textDisabled.withOpacity(0.5),
-          width: 2.0,
+          color: AppColors.textTertiary.withValues(alpha: 0.3),
+          width: 2,
         ),
       ),
       child: CupertinoTextField(
