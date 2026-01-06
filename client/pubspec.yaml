@@ -103,7 +103,8 @@ flutter:
     - assets/pencil.png
     - assets/highlighter.png
     - assets/neon.png
-    - assets/bow.svg
+    - assets/way.svg
+
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see

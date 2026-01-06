@@ -1,5 +1,6 @@
 import 'package:client/components/textfield.dart';
 import 'package:client/screens/auth/email_verification_screen.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:client/services/auth_service.dart';
 import 'package:client/theme/colors.dart';
 import 'package:flutter/cupertino.dart';
@@ -125,13 +126,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
-          'Sign Up',
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
+        title: SvgPicture.asset(
+          'assets/way.svg',
+          height: 24,
         ),
         centerTitle: true,
         leading: IconButton(

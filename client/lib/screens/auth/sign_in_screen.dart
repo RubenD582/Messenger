@@ -1,12 +1,14 @@
 import 'package:client/components/textfield.dart';
 import 'package:client/screens/auth/auth_2fa_verification.dart';
 import 'package:client/screens/auth/signup_screen.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:client/screens/home.dart';
 import 'package:client/services/auth_service.dart';
 import 'package:client/theme/colors.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+
 
 class SignInScreen extends StatefulWidget {
   const SignInScreen({super.key});
@@ -77,9 +79,10 @@ class _SignInScreenState extends State<SignInScreen> {
         if (!mounted) return;
         Navigator.of(context).push(
           MaterialPageRoute(
-            builder: (context) => Auth2FAVerificationScreen(
-              email: _emailController.text.trim(),
-            ),
+            builder:
+                (context) => Auth2FAVerificationScreen(
+                  email: _emailController.text.trim(),
+                ),
           ),
         );
       } else {
@@ -89,8 +92,7 @@ class _SignInScreenState extends State<SignInScreen> {
           (Route<dynamic> route) => false,
         );
       }
-    }
-    else {
+    } else {
       Fluttertoast.showToast(msg: result['error'] ?? 'Login failed');
     }
   }
@@ -102,14 +104,10 @@ class _SignInScreenState extends State<SignInScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text(
-          'Sign In',
-          style: TextStyle(
-            color: AppColors.textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
+        title: SvgPicture.asset(
+          'assets/way.svg',
+          height: 24,
+        ), // Replaced text with SVG
         centerTitle: true,
         automaticallyImplyLeading: false,
       ),
@@ -192,39 +190,43 @@ class _SignInScreenState extends State<SignInScreen> {
 
               Padding(
                 padding: const EdgeInsets.only(bottom: 24.0),
-                child: _isLoading
-                    ? const Center(
-                        child: CupertinoActivityIndicator(radius: 16.0),
-                      )
-                    : GestureDetector(
-                        onTap: (_emailController.text.isNotEmpty &&
-                               _passwordController.text.isNotEmpty)
-                            ? _signIn
-                            : null,
-                        child: Container(
-                          width: double.infinity,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            color: (_emailController.text.isNotEmpty &&
-                                   _passwordController.text.isNotEmpty)
-                                ? Colors.white
-                                : Colors.white.withValues(alpha: 0.4),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          alignment: Alignment.center,
-                          child: Text(
-                            'Sign In',
-                            style: TextStyle(
-                              color: (_emailController.text.isNotEmpty &&
-                                     _passwordController.text.isNotEmpty)
-                                  ? Colors.black
-                                  : Colors.black.withValues(alpha: 0.4),
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
+                child:
+                    _isLoading
+                        ? const Center(
+                          child: CupertinoActivityIndicator(radius: 16.0),
+                        )
+                        : GestureDetector(
+                          onTap:
+                              (_emailController.text.isNotEmpty &&
+                                      _passwordController.text.isNotEmpty)
+                                  ? _signIn
+                                  : null,
+                          child: Container(
+                            width: double.infinity,
+                            height: 50,
+                            decoration: BoxDecoration(
+                              color:
+                                  (_emailController.text.isNotEmpty &&
+                                          _passwordController.text.isNotEmpty)
+                                      ? Colors.white
+                                      : Colors.white.withValues(alpha: 0.4),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              'Sign In',
+                              style: TextStyle(
+                                color:
+                                    (_emailController.text.isNotEmpty &&
+                                            _passwordController.text.isNotEmpty)
+                                        ? Colors.black
+                                        : Colors.black.withValues(alpha: 0.4),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ),
-                      ),
               ),
             ],
           ),

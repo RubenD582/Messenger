@@ -71,44 +71,48 @@ class _HomeState extends State<Home> {
       StatusViewService.clearOldViews();
     });
 
-    setupAPIService().then((_) {
-      fetchRequestCount();
+    setupAPIService()
+        .then((_) {
+          fetchRequestCount();
 
-      // Open the Hive box first
-      _openFriendsBox().then((_) {
-        fetchFriends().then((_) {
-          // Fetch unread counts after friends are loaded
-          _fetchUnreadCounts();
+          // Open the Hive box first
+          _openFriendsBox().then((_) {
+            fetchFriends().then((_) {
+              // Fetch unread counts after friends are loaded
+              _fetchUnreadCounts();
+            });
+          });
+
+          // Load statuses
+          _loadStatuses();
+
+          // Setup status WebSocket listeners
+          _setupStatusListeners();
+
+          // Setup message WebSocket listeners
+          _setupMessageListeners();
+
+          // Update location on app launch/login
+          _updateLocationOnLaunch();
+
+          _scrollController.addListener(() {
+            setState(() {
+              _scrollYOffset =
+                  -(_scrollController.offset / 5).clamp(-100.0, 0.0);
+              _scrollYOpacity = (_scrollController.offset / 75).clamp(0, 1);
+            });
+          });
+
+          _pendingFriendRequestsSubscription = apiService.pendingRequestsStream
+              .listen((count) {
+                setState(() {
+                  _pendingFriendRequestsCount = count;
+                });
+              });
+        })
+        .catchError((error) {
+          _showErrorDialog(error.toString()); // Show error dialog
         });
-      });
-
-      // Load statuses
-      _loadStatuses();
-
-      // Setup status WebSocket listeners
-      _setupStatusListeners();
-
-      // Setup message WebSocket listeners
-      _setupMessageListeners();
-
-      // Update location on app launch/login
-      _updateLocationOnLaunch();
-
-      _scrollController.addListener(() {
-        setState(() {
-          _scrollYOffset = -(_scrollController.offset / 5).clamp(-100.0, 0.0);
-          _scrollYOpacity = (_scrollController.offset / 75).clamp(0, 1);
-        });
-      });
-
-      _pendingFriendRequestsSubscription = apiService.pendingRequestsStream.listen((count) {
-        setState(() {
-          _pendingFriendRequestsCount = count;
-        });
-      });
-    }).catchError((error) {
-      _showErrorDialog(error.toString());  // Show error dialog
-    });
   }
 
   Future<void> _updateLocationOnLaunch() async {
@@ -141,7 +145,9 @@ class _HomeState extends State<Home> {
             );
 
             if (kDebugMode) {
-              print('Location updated on home screen launch: $city, $state, $country');
+              print(
+                'Location updated on home screen launch: $city, $state, $country',
+              );
             }
           }
         }
@@ -189,14 +195,15 @@ class _HomeState extends State<Home> {
     }
 
     List<Map<String, dynamic>> storedFriends = List<Map<String, dynamic>>.from(
-      _friendsBox.get('${uuid}_friends', defaultValue: []).map((friend) => Map<String, dynamic>.from(friend))
+      _friendsBox
+          .get('${uuid}_friends', defaultValue: [])
+          .map((friend) => Map<String, dynamic>.from(friend)),
     );
 
     setState(() {
       _friends = storedFriends;
     });
   }
-
 
   Future<void> _saveFriendsToHive() async {
     if (uuid.isEmpty) {
@@ -217,7 +224,7 @@ class _HomeState extends State<Home> {
 
   Future<void> setupAPIService() async {
     uuid = (await fetchUuid())!;
-    
+
     apiService = ApiService();
     apiService.init(uuid);
   }
@@ -268,18 +275,18 @@ class _HomeState extends State<Home> {
     try {
       // Load user's own statuses (up to 20)
       final myStatusesData = await apiService.getMyStatuses();
-      _myStatuses = myStatusesData.map((data) => Status.fromJson(data)).toList();
-
-
+      _myStatuses =
+          myStatusesData.map((data) => Status.fromJson(data)).toList();
 
       // Load friend statuses and mark as viewed based on local storage
       final friendStatusesData = await apiService.getFriendStatuses();
-      _friendStatuses = friendStatusesData.map((data) {
-        final status = Status.fromJson(data);
-        // Check if this status has been viewed in local storage
-        final hasViewed = StatusViewService.hasViewed(status.id);
-        return status.copyWith(hasViewed: hasViewed);
-      }).toList();
+      _friendStatuses =
+          friendStatusesData.map((data) {
+            final status = Status.fromJson(data);
+            // Check if this status has been viewed in local storage
+            final hasViewed = StatusViewService.hasViewed(status.id);
+            return status.copyWith(hasViewed: hasViewed);
+          }).toList();
 
       setState(() {});
     } catch (error) {
@@ -326,14 +333,17 @@ class _HomeState extends State<Home> {
 
           // Only increment unread count if the message is from someone else
           if (senderId != null && senderId != uuid) {
-            _unreadCounts[conversationId] = (_unreadCounts[conversationId] ?? 0) + 1;
+            _unreadCounts[conversationId] =
+                (_unreadCounts[conversationId] ?? 0) + 1;
           }
         });
       }
     });
 
     // Listen for typing indicators
-    _typingIndicatorSubscription = apiService.typingIndicatorStream.listen((data) {
+    _typingIndicatorSubscription = apiService.typingIndicatorStream.listen((
+      data,
+    ) {
       if (kDebugMode) {
         print('Typing indicator received: $data');
       }
@@ -386,11 +396,13 @@ class _HomeState extends State<Home> {
 
   void _openStatusCreationScreen(GlobalKey statusCircleKey) {
     // Get the position of the status circle
-    final RenderBox? renderBox = statusCircleKey.currentContext?.findRenderObject() as RenderBox?;
+    final RenderBox? renderBox =
+        statusCircleKey.currentContext?.findRenderObject() as RenderBox?;
     if (renderBox == null) return;
 
     final offset = renderBox.localToGlobal(Offset.zero);
-    final circleCenter = offset + Offset(renderBox.size.width / 2, renderBox.size.height / 2);
+    final circleCenter =
+        offset + Offset(renderBox.size.width / 2, renderBox.size.height / 2);
 
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -400,12 +412,30 @@ class _HomeState extends State<Home> {
   }
 
   void _showSearchModal() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => discover.SearchPage()),
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder:
+          (context) => DraggableScrollableSheet(
+            initialChildSize: 0.9,
+            minChildSize: 0.5,
+            maxChildSize: 0.95,
+            builder: (_, controller) {
+              return Container(
+                decoration: const BoxDecoration(
+                  color: Colors.black,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
+                  ),
+                ),
+                child: discover.DiscoverScreen(),
+              );
+            },
+          ),
     );
   }
-
 
   @override
   void dispose() {
@@ -423,10 +453,8 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> _refreshContent() async {
-    await Future.delayed(Duration(seconds: 2)); 
-    setState(() {
-
-    });
+    await Future.delayed(Duration(seconds: 2));
+    setState(() {});
   }
 
   @override
@@ -448,11 +476,12 @@ class _HomeState extends State<Home> {
             flexibleSpace: Builder(
               builder: (context) {
                 return Container(
-                  decoration: const BoxDecoration(
-                    color: AppColors.background,
-                  ),
+                  decoration: const BoxDecoration(color: AppColors.background),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.end,
@@ -471,9 +500,17 @@ class _HomeState extends State<Home> {
                             ),
                             Row(
                               children: [
-                                _iconButton(Icons.more_horiz, Colors.white.withAlpha(50), _showSearchModal),
+                                _iconButton(
+                                  Icons.more_horiz,
+                                  Colors.white.withAlpha(50),
+                                  _showSearchModal,
+                                ),
                                 const SizedBox(width: 10),
-                                _iconButton(Icons.add, const Color(0xFF5856D6), _showSearchModal),
+                                _iconButton(
+                                  Icons.add,
+                                  const Color(0xFF5856D6),
+                                  _showSearchModal,
+                                ),
                               ],
                             ),
                           ],
@@ -485,65 +522,45 @@ class _HomeState extends State<Home> {
               },
             ),
           ),
-                
+
           // **Sticky Search Header**
           SliverStickyHeader(
             header: Container(
               padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-              decoration: const BoxDecoration(
-                color: AppColors.background,
-              ),
+              decoration: const BoxDecoration(color: AppColors.background),
               child: Transform.translate(
-                offset: Offset(
-                  0,
-                  _scrollYOffset
-                ),
+                offset: Offset(0, _scrollYOffset),
 
                 child: CupertinoSearchTextField(
                   controller: _searchController,
                   placeholder: "Search conversations",
-                  placeholderStyle: const TextStyle(
-                    color: AppColors.textTertiary,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w400,
-                  ),
+                  backgroundColor: AppColors.surfaceVariant,
+                  itemColor: Colors.grey[600] ?? Colors.grey,
                   style: const TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 15,
+                    color: Colors.white,
+                    fontSize: 17,
                     fontWeight: FontWeight.w400,
                   ),
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                  itemColor: Colors.white.withValues(alpha: 0.6),
-                  decoration: BoxDecoration(
-                    color: Colors.transparent,
-                    border: Border.all(
-                      color: AppColors.textTertiary.withValues(alpha: 0.3),
-                      width: 1,
-                    ),
-                    borderRadius: BorderRadius.circular(20),
+                  placeholderStyle: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 17,
+                    fontWeight: FontWeight.w400,
                   ),
                   onChanged: (value) {},
                   onSubmitted: (value) {},
-                  prefixIcon: Padding(
-                    padding: const EdgeInsets.only(left: 8),
-                    child: Icon(
-                      CupertinoIcons.search,
-                      color: AppColors.textTertiary,
-                      size: 18,
-                    ),
-                  ),
-                  suffixIcon: Icon(null),
                 ),
               ),
             ),
             sliver: SliverToBoxAdapter(
               child: Transform.translate(
-                offset: Offset(
-                0, 
-                _scrollYOffset * 0.75
-              ),
+                offset: Offset(0, _scrollYOffset * 0.75),
                 child: Container(
-                  padding: const EdgeInsets.only(left: 12, right: 12, top: 8, bottom: 8),
+                  padding: const EdgeInsets.only(
+                    left: 12,
+                    right: 12,
+                    top: 8,
+                    bottom: 8,
+                  ),
                   child: AnimatedOpacity(
                     opacity: 1 - _scrollYOpacity,
                     duration: Duration(milliseconds: 200),
@@ -569,7 +586,7 @@ class _HomeState extends State<Home> {
                               color: Colors.white.withAlpha(150),
                               size: 18,
                             ),
-                          )
+                          ),
                         ],
                       ),
                     ),
@@ -578,7 +595,7 @@ class _HomeState extends State<Home> {
               ),
             ),
           ),
-      
+
           // **Stories Bar (UI Mockup)**
           if (selectedChip == "All")
             SliverToBoxAdapter(
@@ -588,23 +605,23 @@ class _HomeState extends State<Home> {
               ),
             ),
 
-
-
-
           // **Friend List / Requests**
-          SliverToBoxAdapter(
-            child: Transform.translate(
-              offset: Offset(
-                0,
-                _scrollYOffset
-              ),
-              child: Container(
-                child: selectedChip == "Requests"
-                  ? PendingRequestsScreen()
-                  : friendList(),
-              ),
+          if (_friends.isEmpty && !isLoading && selectedChip != "Requests")
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: _buildEmptyState(),
             )
-          ),
+          else
+            SliverToBoxAdapter(
+              child: Transform.translate(
+                offset: Offset(0, _scrollYOffset),
+                child: Container(
+                  child: selectedChip == "Requests"
+                      ? PendingRequestsScreen()
+                      : friendList(),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -614,10 +631,7 @@ class _HomeState extends State<Home> {
     return Container(
       width: 26,
       height: 26,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: bgColor,
-      ),
+      decoration: BoxDecoration(shape: BoxShape.circle, color: bgColor),
       child: GestureDetector(
         onTap: onTap,
         child: Icon(icon, size: 20, color: Colors.white),
@@ -625,13 +639,7 @@ class _HomeState extends State<Home> {
     );
   }
 
-
   Widget friendList() {
-    // Empty state
-    if (_friends.isEmpty && !isLoading) {
-      return _buildEmptyState();
-    }
-
     return RefreshIndicator(
       backgroundColor: Colors.transparent,
       color: Colors.white,
@@ -653,19 +661,22 @@ class _HomeState extends State<Home> {
           final int unreadCount = _unreadCounts[conversationId] ?? 0;
 
           // Mock data for features not yet implemented
-          final bool isOnline = index % 3 == 0; // Mock: every 3rd user is online
-          final String lastMessage = _lastMessages[conversationId] ?? 'Tap to send a message';
-          final String timestamp = index % 6 == 0
-              ? 'Just now'
-              : index % 6 == 1
+          final bool isOnline =
+              index % 3 == 0; // Mock: every 3rd user is online
+          final String lastMessage =
+              _lastMessages[conversationId] ?? 'Tap to send a message';
+          final String timestamp =
+              index % 6 == 0
+                  ? 'Just now'
+                  : index % 6 == 1
                   ? '2m ago'
                   : index % 6 == 2
-                      ? '1h ago'
-                      : index % 6 == 3
-                          ? 'Yesterday'
-                          : index % 6 == 4
-                              ? 'Tuesday'
-                              : 'Monday';
+                  ? '1h ago'
+                  : index % 6 == 3
+                  ? 'Yesterday'
+                  : index % 6 == 4
+                  ? 'Tuesday'
+                  : 'Monday';
 
           return Column(
             children: [
@@ -683,7 +694,12 @@ class _HomeState extends State<Home> {
                   color: Color(0xFF5856D6),
                   alignment: Alignment.centerLeft,
                   padding: EdgeInsets.only(left: 20),
-                  child: Icon(Icons.push_pin, color: Colors.white, size: 20, weight: 300),
+                  child: Icon(
+                    Icons.push_pin,
+                    color: Colors.white,
+                    size: 20,
+                    weight: 300,
+                  ),
                 ),
                 secondaryBackground: Container(
                   color: Color(0xFFFF3B30),
@@ -693,21 +709,29 @@ class _HomeState extends State<Home> {
                 ),
                 child: InkWell(
                   onTap: () {
-                    final conversationId = _getConversationId(uuid, user['friend_id']);
+                    final conversationId = _getConversationId(
+                      uuid,
+                      user['friend_id'],
+                    );
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => ChatScreen(
-                          conversationId: conversationId,
-                          friendId: user['friend_id'],
-                          friendName: '${user['first_name']} ${user['last_name']}',
-                          apiService: apiService,
-                        ),
+                        builder:
+                            (context) => ChatScreen(
+                              conversationId: conversationId,
+                              friendId: user['friend_id'],
+                              friendName:
+                                  '${user['first_name']} ${user['last_name']}',
+                              apiService: apiService,
+                            ),
                       ),
                     );
                   },
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     child: Row(
                       children: [
                         // Profile picture with online status
@@ -728,7 +752,10 @@ class _HomeState extends State<Home> {
                                   decoration: BoxDecoration(
                                     color: Color(0xFF30D158),
                                     shape: BoxShape.circle,
-                                    border: Border.all(color: AppColors.background, width: 2),
+                                    border: Border.all(
+                                      color: AppColors.background,
+                                      width: 2,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -741,7 +768,8 @@ class _HomeState extends State<Home> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Flexible(
                                     child: Text(
@@ -770,22 +798,22 @@ class _HomeState extends State<Home> {
                               SizedBox(height: 0),
                               isTyping
                                   ? Text(
-                                      'Typing...',
-                                      style: TextStyle(
-                                        color: Color(0xFF30D158),
-                                        fontSize: 14,
-                                        fontStyle: FontStyle.italic,
-                                      ),
-                                    )
-                                  : Text(
-                                      lastMessage,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: Color(0xFF8E8E93),
-                                        fontSize: 14,
-                                      ),
+                                    'Typing...',
+                                    style: TextStyle(
+                                      color: Color(0xFF30D158),
+                                      fontSize: 14,
+                                      fontStyle: FontStyle.italic,
                                     ),
+                                  )
+                                  : Text(
+                                    lastMessage,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: Color(0xFF8E8E93),
+                                      fontSize: 14,
+                                    ),
+                                  ),
                             ],
                           ),
                         ),
@@ -802,37 +830,27 @@ class _HomeState extends State<Home> {
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            CupertinoIcons.chat_bubble_2,
-            size: 80,
-            color: Colors.white.withValues(alpha: 0.3),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 200),
+      child: Center(
+        child: ElevatedButton.icon(
+          onPressed: _showSearchModal,
+          // icon: const Icon(CupertinoIcons.add_circled_solid, color: Colors.white), // Filled icon
+          label: const Text(
+            'Add Friends',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
-          SizedBox(height: 16),
-          Text(
-            'Tap to send a message',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.6),
-              fontSize: 20,
-              fontWeight: FontWeight.w600,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.white.withOpacity(0.2),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
             ),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           ),
-          SizedBox(height: 8),
-          Text(
-            'Tap + to start chatting with friends',
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.4),
-              fontSize: 14,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
-
 
   // Helper function to generate conversation ID (same logic as backend)
   String _getConversationId(String userId1, String userId2) {
@@ -862,7 +880,8 @@ class _HomeState extends State<Home> {
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: 1 + uniqueFriendStatuses.length, // "Your Story" + unique friends
+        itemCount:
+            1 + uniqueFriendStatuses.length, // "Your Story" + unique friends
         itemBuilder: (context, index) {
           final isYou = index == 0;
 
@@ -877,43 +896,45 @@ class _HomeState extends State<Home> {
                     // Show action sheet to view or create
                     showCupertinoModalPopup(
                       context: context,
-                      builder: (BuildContext context) => CupertinoActionSheet(
-                        actions: [
-                          CupertinoActionSheetAction(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => StatusViewerScreen(
-                                    statuses: _myStatuses,
-                                    currentUserId: uuid,
-                                    apiService: apiService,
-                                  ),
-                                ),
-                              ).then((_) {
-                                // Reload statuses when coming back
-                                _loadStatuses();
-                              });
-                            },
-                            child: const Text('View Status'),
+                      builder:
+                          (BuildContext context) => CupertinoActionSheet(
+                            actions: [
+                              CupertinoActionSheetAction(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder:
+                                          (context) => StatusViewerScreen(
+                                            statuses: _myStatuses,
+                                            currentUserId: uuid,
+                                            apiService: apiService,
+                                          ),
+                                    ),
+                                  ).then((_) {
+                                    // Reload statuses when coming back
+                                    _loadStatuses();
+                                  });
+                                },
+                                child: const Text('View Status'),
+                              ),
+                              CupertinoActionSheetAction(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  _openStatusCreationScreen(yourStoryKey);
+                                },
+                                child: const Text('Create New Status'),
+                              ),
+                            ],
+                            cancelButton: CupertinoActionSheetAction(
+                              onPressed: () {
+                                Navigator.pop(context);
+                              },
+                              isDefaultAction: true,
+                              child: const Text('Cancel'),
+                            ),
                           ),
-                          CupertinoActionSheetAction(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              _openStatusCreationScreen(yourStoryKey);
-                            },
-                            child: const Text('Create New Status'),
-                          ),
-                        ],
-                        cancelButton: CupertinoActionSheetAction(
-                          onPressed: () {
-                            Navigator.pop(context);
-                          },
-                          isDefaultAction: true,
-                          child: const Text('Cancel'),
-                        ),
-                      ),
                     );
                   } else {
                     // No statuses, directly create
@@ -928,34 +949,38 @@ class _HomeState extends State<Home> {
                       children: [
                         hasMyStatus
                             ? SegmentedStatusRing(
-                                segmentCount: _myStatuses.length,
-                                size: 64,
-                                strokeWidth: 2.5,
-                                child: const CircleAvatar(
-                                  radius: 26,
-                                  backgroundImage: AssetImage('assets/noprofile.png'),
+                              segmentCount: _myStatuses.length,
+                              size: 64,
+                              strokeWidth: 2.5,
+                              child: const CircleAvatar(
+                                radius: 26,
+                                backgroundImage: AssetImage(
+                                  'assets/noprofile.png',
                                 ),
-                              )
+                              ),
+                            )
                             : Container(
-                                width: 64,
-                                height: 64,
+                              width: 64,
+                              height: 64,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Color(0xFF48484A),
+                              ),
+                              padding: const EdgeInsets.all(2.5),
+                              child: Container(
                                 decoration: const BoxDecoration(
                                   shape: BoxShape.circle,
-                                  color: Color(0xFF48484A),
+                                  color: Colors.black,
                                 ),
                                 padding: const EdgeInsets.all(2.5),
-                                child: Container(
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Colors.black,
-                                  ),
-                                  padding: const EdgeInsets.all(2.5),
-                                  child: const CircleAvatar(
-                                    radius: 26,
-                                    backgroundImage: AssetImage('assets/noprofile.png'),
+                                child: const CircleAvatar(
+                                  radius: 26,
+                                  backgroundImage: AssetImage(
+                                    'assets/noprofile.png',
                                   ),
                                 ),
                               ),
+                            ),
                         // Always show + icon
                         Positioned(
                           right: 0,
@@ -968,7 +993,11 @@ class _HomeState extends State<Home> {
                               shape: BoxShape.circle,
                               border: Border.all(color: Colors.black, width: 2),
                             ),
-                            child: const Icon(Icons.add, size: 12, color: Colors.white),
+                            child: const Icon(
+                              Icons.add,
+                              size: 12,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ],
@@ -980,11 +1009,15 @@ class _HomeState extends State<Home> {
           } else {
             // Friend status circle
             final friendStatuses = uniqueFriendStatuses[index - 1];
-            final viewedCount = friendStatuses.where((status) => status.hasViewed).length;
+            final viewedCount =
+                friendStatuses.where((status) => status.hasViewed).length;
 
             // Find the first unviewed status index
-            final firstUnviewedIndex = friendStatuses.indexWhere((status) => !status.hasViewed);
-            final initialIndex = firstUnviewedIndex != -1 ? firstUnviewedIndex : 0;
+            final firstUnviewedIndex = friendStatuses.indexWhere(
+              (status) => !status.hasViewed,
+            );
+            final initialIndex =
+                firstUnviewedIndex != -1 ? firstUnviewedIndex : 0;
 
             final storyKey = GlobalKey(); // Add a GlobalKey here
             return Padding(
@@ -993,23 +1026,30 @@ class _HomeState extends State<Home> {
                 key: storyKey, // Assign the key to the GestureDetector
                 onTap: () {
                   // Get the position of the status circle
-                  final RenderBox? renderBox = storyKey.currentContext?.findRenderObject() as RenderBox?;
+                  final RenderBox? renderBox =
+                      storyKey.currentContext?.findRenderObject() as RenderBox?;
                   if (renderBox == null) return;
 
                   final offset = renderBox.localToGlobal(Offset.zero);
-                  final circleCenter = offset + Offset(renderBox.size.width / 2, renderBox.size.height / 2);
+                  final circleCenter =
+                      offset +
+                      Offset(
+                        renderBox.size.width / 2,
+                        renderBox.size.height / 2,
+                      );
 
                   // View friend statuses with CircularRevealPageRoute
                   // Start from the first unviewed status
                   Navigator.push(
                     context,
                     CircularRevealPageRoute(
-                      builder: (context) => StatusViewerScreen(
-                        statuses: friendStatuses,
-                        currentUserId: uuid,
-                        apiService: apiService,
-                        initialIndex: initialIndex,
-                      ),
+                      builder:
+                          (context) => StatusViewerScreen(
+                            statuses: friendStatuses,
+                            currentUserId: uuid,
+                            apiService: apiService,
+                            initialIndex: initialIndex,
+                          ),
                       originOffset: circleCenter,
                       originRadius: 32.0, // Status circle radius
                     ),
@@ -1043,7 +1083,7 @@ class _HomeState extends State<Home> {
 
   // Updated chip function with single selection handling
   Widget chip(String name, [int? count]) {
-    bool isSelected = selectedChip == name;  // Check if the chip is selected
+    bool isSelected = selectedChip == name; // Check if the chip is selected
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 0),
@@ -1051,16 +1091,14 @@ class _HomeState extends State<Home> {
         child: GestureDetector(
           onTap: () {
             setState(() {
-              selectedChip = name; 
+              selectedChip = name;
             });
           },
           child: Container(
             height: 32,
             decoration: BoxDecoration(
               color: isSelected ? Color(0xFF5856D6) : Color(0xFF1C1C1E),
-              borderRadius: const BorderRadius.all(
-                Radius.circular(100),
-              ),
+              borderRadius: const BorderRadius.all(Radius.circular(100)),
             ),
             child: Center(
               child: Padding(
@@ -1082,11 +1120,13 @@ class _HomeState extends State<Home> {
                     //       ),
                     //     ),
                     //   ),
-
                     Text(
                       name,
                       style: TextStyle(
-                        color: isSelected ? Colors.white : Color(0xFFFFFFFF).withAlpha(150),
+                        color:
+                            isSelected
+                                ? Colors.white
+                                : Color(0xFFFFFFFF).withAlpha(150),
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                         letterSpacing: -0.3,
@@ -1100,7 +1140,10 @@ class _HomeState extends State<Home> {
                         child: Text(
                           '(${count >= 10 ? '9+' : count.toString()})',
                           style: TextStyle(
-                            color: isSelected ? Colors.white : Color.fromARGB(140, 255, 255, 255),
+                            color:
+                                isSelected
+                                    ? Colors.white
+                                    : Color.fromARGB(140, 255, 255, 255),
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
                           ),
