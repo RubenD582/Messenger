@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:ui';
+import 'package:client/screens/notifications.dart';
 
-import 'package:client/screens/requests.dart';
 import 'package:client/screens/chat_screen.dart';
 import 'package:client/screens/status_creation_screen.dart';
 import 'package:client/screens/status_viewer_screen.dart';
@@ -60,10 +60,19 @@ class _HomeState extends State<Home> {
   late StreamSubscription<Map<String, dynamic>> _typingIndicatorSubscription;
   late StreamSubscription<Map<String, dynamic>> _readReceiptSubscription;
 
+  // Requests state
+  List<Map<String, dynamic>> _pendingRequests = [];
+  bool _isLoadingRequests = false;
+  bool _hasFetchedRequests = false;
+
   int _selectedIndex = 0;
   final List<String> _pageTitles = ["Home", "Search", "Notifications", "Profile"];
 
   void _onItemTapped(int index) {
+    if (index == 2 && !_hasFetchedRequests) {
+      fetchPendingRequests();
+    }
+
     if (_selectedIndex != index) {
       _scrollController.jumpTo(0);
     }
@@ -81,47 +90,163 @@ class _HomeState extends State<Home> {
       StatusViewService.clearOldViews();
     });
 
-    setupAPIService()
-        .then((_) {
-          fetchRequestCount();
+    setupAPIService().then((didSucceed) {
+      if (!didSucceed) {
+        if (mounted) {
+          _showErrorDialog("User authentication failed. Please restart the app.");
+        }
+        return;
+      }
+      
+      fetchRequestCount();
 
-          // Open the Hive box first
-          _openFriendsBox().then((_) {
-            fetchFriends().then((_) {
-              // Fetch unread counts after friends are loaded
-              _fetchUnreadCounts();
-            });
-          });
-
-          // Load statuses
-          _loadStatuses();
-
-          // Setup status WebSocket listeners
-          _setupStatusListeners();
-
-          // Setup message WebSocket listeners
-          _setupMessageListeners();
-
-          // Update location on app launch/login
-          _updateLocationOnLaunch();
-
-          _scrollController.addListener(() {
-            setState(() {
-              _scrollYOffset =
-                  -(_scrollController.offset / 5).clamp(-100.0, 0.0);
-              _scrollYOpacity = (_scrollController.offset / 75).clamp(0, 1);
-            });
-          });
-
-          _pendingFriendRequestsSubscription = apiService.pendingRequestsStream
-              .listen((count) {
-                setState(() {
-                });
-              });
-        })
-        .catchError((error) {
-          _showErrorDialog(error.toString()); // Show error dialog
+      // Open the Hive box first
+      _openFriendsBox().then((_) {
+        fetchFriends().then((_) {
+          // Fetch unread counts after friends are loaded
+          _fetchUnreadCounts();
         });
+      });
+
+      // Load statuses
+      _loadStatuses();
+
+      // Setup status WebSocket listeners
+      _setupStatusListeners();
+
+      // Setup message WebSocket listeners
+      _setupMessageListeners();
+
+      // Update location on app launch/login
+      _updateLocationOnLaunch();
+
+      _scrollController.addListener(() {
+        setState(() {
+          _scrollYOffset =
+              -(_scrollController.offset / 5).clamp(-100.0, 0.0);
+          _scrollYOpacity = (_scrollController.offset / 75).clamp(0, 1);
+        });
+      });
+
+      _pendingFriendRequestsSubscription = apiService.pendingRequestsStream
+          .listen((count) {
+            setState(() {
+            });
+          });
+    }).catchError((error) {
+      _showErrorDialog(error.toString()); // Show error dialog
+    });
+  }
+
+  Future<void> fetchPendingRequests() async {
+    setState(() {
+      _isLoadingRequests = true;
+      _hasFetchedRequests = true;
+    });
+    try {
+      if (kDebugMode) {
+        print('Fetching pending friend requests...');
+      }
+      final requests = await apiService.fetchPendingFriendRequests();
+      if (kDebugMode) {
+        print('Fetched pending requests: $requests');
+      }
+      setState(() {
+        _pendingRequests = requests;
+        _isLoadingRequests = false;
+      });
+    } catch (error) {
+      if (kDebugMode) {
+        print('Error fetching pending requests: $error');
+      }
+      setState(() {
+        _isLoadingRequests = false;
+      });
+    }
+  }
+
+  Future<void> acceptFriendRequest(String friendId) async {
+    // Save the request in case we need to rollback
+    final requestToRemove = _pendingRequests.firstWhere((request) => request['id'] == friendId);
+    final int originalIndex = _pendingRequests.indexOf(requestToRemove);
+
+    // Optimistic UI update - remove immediately
+    setState(() {
+      _pendingRequests.removeWhere((request) => request['id'] == friendId);
+    });
+
+    try {
+      await apiService.acceptFriendRequest(friendId);
+      // Success - UI already updated
+    } catch (error) {
+      if (kDebugMode) {
+        print('Error accepting friend request: $error');
+      }
+
+      // Rollback on error - restore the request
+      setState(() {
+        _pendingRequests.insert(originalIndex, requestToRemove);
+      });
+
+      // Show error to user
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to accept friend request. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> rejectFriendRequest(String friendId) async {
+    final requestToRemove = _pendingRequests.firstWhere((request) => request['id'] == friendId);
+    final int originalIndex = _pendingRequests.indexOf(requestToRemove);
+
+    setState(() {
+      _pendingRequests.removeWhere((request) => request['id'] == friendId);
+    });
+
+    try {
+      // Assuming a rejectFriendRequest method exists in the apiService.
+      // await apiService.rejectFriendRequest(friendId);
+    } catch (error) {
+      if (kDebugMode) {
+        print('Error rejecting friend request: $error');
+      }
+      setState(() {
+        _pendingRequests.insert(originalIndex, requestToRemove);
+      });
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to reject friend request. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  String formatRelativeTime(String isoString) {
+    final now = DateTime.now();
+    final then = DateTime.parse(isoString);
+    final difference = now.difference(then);
+
+    if (difference.inDays > 365) {
+      return '${(difference.inDays / 365).floor()}y';
+    } else if (difference.inDays >= 7) {
+      return '${(difference.inDays / 7).floor()}w';
+    } else if (difference.inDays > 0) {
+      return '${difference.inDays}d';
+    } else if (difference.inHours > 0) {
+      return '${difference.inHours}h';
+    } else if (difference.inMinutes > 0) {
+      return '${difference.inMinutes}m';
+    } else {
+      return 'now';
+    }
   }
 
   Future<void> _updateLocationOnLaunch() async {
@@ -231,11 +356,23 @@ class _HomeState extends State<Home> {
     }
   }
 
-  Future<void> setupAPIService() async {
-    uuid = (await fetchUuid())!;
+  Future<bool> setupAPIService() async {
+    String? userUuid = await fetchUuid();
 
+    if (userUuid == null) {
+      if (kDebugMode) {
+        print("CRITICAL: User UUID is null. API service cannot be initialized.");
+      }
+      return false;
+    }
+
+    uuid = userUuid;
     apiService = ApiService();
     apiService.init(uuid);
+    if (kDebugMode) {
+      print("API Service Initialized Successfully for UUID: $uuid");
+    }
+    return true;
   }
 
   Future<void> fetchRequestCount() async {
@@ -717,9 +854,13 @@ class _HomeState extends State<Home> {
                   ),
                 ),
           ] else if (_selectedIndex == 2) ...[
-              SliverToBoxAdapter(
-                child: const PendingRequestsScreen(),
-              )
+            NotificationsScreen(
+              isLoadingRequests: _isLoadingRequests,
+              pendingRequests: _pendingRequests,
+              acceptFriendRequest: acceptFriendRequest,
+              rejectFriendRequest: rejectFriendRequest,
+              formatRelativeTime: formatRelativeTime,
+            )
           ] else ...[
             SliverFillRemaining(
               child: Center(

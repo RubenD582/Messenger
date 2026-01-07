@@ -388,7 +388,7 @@ router.get("/pending-requests", authenticateToken, async (req, res) => {
     
     // If not in cache, get from database
     const pendingRequests = await db.query(
-      "SELECT users.id, users.username, users.first_name, users.last_name FROM friends JOIN users ON users.id = friends.user_id WHERE friends.friend_id = $1 AND friends.status = 'pending'",
+      "SELECT users.id, users.username, users.first_name, users.last_name, friends.created_at FROM friends JOIN users ON users.id = friends.user_id WHERE friends.friend_id = $1 AND friends.status = 'pending'",
       [userId]
     );
     
