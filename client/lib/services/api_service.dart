@@ -22,14 +22,18 @@ class ApiService {
   final StreamController<Map<String, dynamic>> _positionUpdateController = StreamController<Map<String, dynamic>>.broadcast();
   final StreamController<Map<String, dynamic>> _statusCreatedController = StreamController<Map<String, dynamic>>.broadcast();
   final StreamController<Map<String, dynamic>> _statusDeletedController = StreamController<Map<String, dynamic>>.broadcast();
+  final StreamController<Map<String, dynamic>> _newNotificationController = StreamController<Map<String, dynamic>>.broadcast(); // New notification stream
+  final StreamController<void> _friendListUpdateController = StreamController<void>.broadcast(); // Friend list update trigger
 
   // Callback for when WebSocket reconnects
   Function()? onReconnected;
 
-  Future<void> init(String? uuid) async {
+  Future<void> init(String? uuid, {bool connectSocket = true}) async {
     this.uuid = uuid;
 
-    connectWebSocket(this.uuid);
+    if (connectSocket) {
+      connectWebSocket(this.uuid);
+    }
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -45,6 +49,8 @@ class ApiService {
   Stream<Map<String, dynamic>> get positionUpdateStream => _positionUpdateController.stream;
   Stream<Map<String, dynamic>> get statusCreatedStream => _statusCreatedController.stream;
   Stream<Map<String, dynamic>> get statusDeletedStream => _statusDeletedController.stream;
+  Stream<Map<String, dynamic>> get newNotificationStream => _newNotificationController.stream; // New notification stream
+  Stream<void> get friendListUpdateStream => _friendListUpdateController.stream; // Friend list update stream
   
   void connectWebSocket(String? uuid) async {
     _socket = IO.io(baseUrl, <String, dynamic>{
@@ -112,7 +118,20 @@ class ApiService {
         print('   Receiver ID: ${data['receiverId']}');
         print('   Sequence ID: ${data['sequenceId']}');
       }
+
+      // Add to message stream
       _newMessageController.add(Map<String, dynamic>.from(data));
+
+      // Send acknowledgment to server for delivery tracking
+      if (_socket != null && _socket!.connected) {
+        _socket!.emit('messageAck', {
+          'messageId': data['messageId'],
+          'receivedAt': DateTime.now().toIso8601String(),
+        });
+        if (kDebugMode) {
+          print('   ✅ Sent acknowledgment for message ${data['messageId']}');
+        }
+      }
     });
 
     // Listen for typing indicators
@@ -139,31 +158,13 @@ class ApiService {
       _positionUpdateController.add(Map<String, dynamic>.from(data));
     });
 
-    _socket!.on("newFriendRequest", (data) {
-      int friendRequestCount = int.tryParse(data['requestCount'].toString()) ?? 0;
-
-      NotificationService.showNotification(
-        title: 'Friend Request',
-        body: '${data['senderName']} has sent you a friend request.'
-      );
-
-      // Add the updated count to the StreamController
-      _pendingFriendRequestsController.add(friendRequestCount);
-    });
-
-    _socket!.on("friendRequestAccepted", (data) {
-      // If friendId is your uuid, then the other person accepted your friend request
-      if (data['friendId'] == uuid) {
-        NotificationService.showNotification(
-          title: 'New friend',
-          body: '${data['friendName']} accepted your friend request!'
-        );
-      } else {
-        int friendRequestCount = int.tryParse(data['requestCount'].toString()) ?? 0;
-
-        // Add the updated count to the StreamController
-        _pendingFriendRequestsController.add(friendRequestCount);
+    // Listen for badge count updates from unified notification system
+    _socket!.on("badgeCountUpdate", (data) {
+      if (kDebugMode) {
+        print('🔔 WebSocket: Badge count update - ${data['count']}');
       }
+      int friendRequestCount = int.tryParse(data['count'].toString()) ?? 0;
+      _pendingFriendRequestsController.add(friendRequestCount);
     });
 
     // Listen for status events
@@ -179,6 +180,32 @@ class ApiService {
         print('WebSocket: Status deleted - ${data['id']}');
       }
       _statusDeletedController.add(Map<String, dynamic>.from(data));
+    });
+
+    // Listen for new user notification events from unified notification system
+    _socket!.on("newUserNotification", (data) {
+      if (kDebugMode) {
+        print('🔔 WebSocket: New user notification received - ${data['type']}');
+      }
+
+      // Add to notification stream for UI update
+      _newNotificationController.add(Map<String, dynamic>.from(data));
+
+      // Show push notification based on type
+      final type = data['type'];
+      final actor = data['actor'];
+
+      if (type == 'FRIEND_REQUEST_RECEIVED') {
+        NotificationService.showNotification(
+          title: 'Friend Request',
+          body: '${actor['username']} has sent you a friend request.'
+        );
+      } else if (type == 'FRIEND_REQUEST_ACCEPTED') {
+        NotificationService.showNotification(
+          title: 'Friend Request Accepted',
+          body: '${actor['username']} accepted your friend request!'
+        );
+      }
     });
 
     _socket!.onReconnect((data) {
@@ -340,6 +367,28 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> fetchFriendsOverview() async {
+    final String apiUrl = '$baseUrl/messages/friends-overview';
+    final token = await AuthService.getToken();
+
+    final response = await http.get(
+      Uri.parse(apiUrl),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return data;
+    } else if (response.statusCode == 404) {
+      return {'friends': [], 'timestamp': DateTime.now().toIso8601String()};
+    } else {
+      throw Exception('Failed to load friends overview');
+    }
+  }
+
   Future<void> acceptFriendRequest(String friendId) async {
     final String apiUrl = '$baseUrl/friends/accept-request';
     final token = await AuthService.getToken();
@@ -356,6 +405,89 @@ class ApiService {
     if (response.statusCode != 200) {
       final responseBody = json.decode(response.body);
       throw Exception(responseBody['message'] ?? 'Failed to accept friend request');
+    }
+
+    // Trigger friend list update for the acceptor
+    _friendListUpdateController.add(null);
+  }
+
+  Future<void> rejectFriendRequest(String friendId) async {
+    final String apiUrl = '$baseUrl/friends/reject-request';
+    final token = await AuthService.getToken();
+
+    final response = await http.post(
+      Uri.parse(apiUrl),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: json.encode({'friendId': friendId}),
+    );
+
+    if (response.statusCode != 200) {
+      final responseBody = json.decode(response.body);
+      throw Exception(responseBody['message'] ?? 'Failed to reject friend request');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchNotifications() async {
+    final String apiUrl = '$baseUrl/notifications';
+    final token = await AuthService.getToken();
+
+    final response = await http.get(
+      Uri.parse(apiUrl),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return List<Map<String, dynamic>>.from(data['notifications']);
+    } else {
+      // Return empty list on error to prevent UI from crashing
+      return [];
+    }
+  }
+
+  Future<void> markAllNotificationsAsRead() async {
+    final String apiUrl = '$baseUrl/notifications/mark-read';
+    final token = await AuthService.getToken();
+
+    final response = await http.post(
+      Uri.parse(apiUrl),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      final responseBody = json.decode(response.body);
+      throw Exception(responseBody['message'] ?? 'Failed to mark notifications as read');
+    }
+  }
+
+  Future<void> updateNotificationStatus(String notificationId, String status) async {
+    final String apiUrl = '$baseUrl/notifications/update-status';
+    final token = await AuthService.getToken();
+
+    final response = await http.post(
+      Uri.parse(apiUrl),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: json.encode({
+        'notificationId': notificationId,
+        'status': status,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      final responseBody = json.decode(response.body);
+      throw Exception(responseBody['message'] ?? 'Failed to update notification status');
     }
   }
 
@@ -573,6 +705,8 @@ class ApiService {
     _positionUpdateController.close();
     _statusCreatedController.close();
     _statusDeletedController.close();
+    _newNotificationController.close();
+    _friendListUpdateController.close();
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////////

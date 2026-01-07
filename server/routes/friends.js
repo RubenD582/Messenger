@@ -34,20 +34,21 @@ router.get("/search", authenticateToken, searchLimiter, async (req, res) => {
 
   try {
     const result = await db.query(
-      `SELECT 
-        users.id, 
-        users.username, 
-        users.first_name, 
+      `SELECT
+        users.id,
+        users.username,
+        users.first_name,
         users.last_name,
         users.verified,
-        COALESCE(friends.status, 'not_friends') AS status,  
+        users.developer,
+        COALESCE(friends.status, 'not_friends') AS status,
         friends.user_id AS sender
       FROM users
-      LEFT JOIN friends 
+      LEFT JOIN friends
         ON friends.user_id = $1 AND friends.friend_id = users.id  -- Only check one direction!
-      WHERE 
+      WHERE
         (
-          users.first_name ILIKE $2 
+          users.first_name ILIKE $2
           OR users.last_name ILIKE $3
           OR (users.first_name || ' ' || users.last_name) ILIKE $4
           OR users.username ILIKE $5
@@ -55,10 +56,10 @@ router.get("/search", authenticateToken, searchLimiter, async (req, res) => {
       LIMIT 5
       `,
       [
-        userId, 
-        `${searchTerm}%`, 
-        `${searchTerm}%`, 
-        `%${searchTerm}%`, 
+        userId,
+        `${searchTerm}%`,
+        `${searchTerm}%`,
+        `%${searchTerm}%`,
         `%${searchTerm}%`
       ]
     );    
@@ -132,41 +133,46 @@ router.post("/send-request", authenticateToken, async (req, res) => {
       await invalidateCache(userId);
       await invalidateCache(friendId);
 
+      // Clear notification deduplication keys
+      await clearNotificationDedupeKeys(userId, friendId);
+
       // Get user names
-      const userInfo = await db.query("SELECT first_name FROM users WHERE id = $1", [userId]);
-      const friendInfo = await db.query("SELECT first_name FROM users WHERE id = $1", [friendId]);
+      const userInfo = await db.query("SELECT first_name, username, verified, developer FROM users WHERE id = $1", [userId]);
+      const friendInfo = await db.query("SELECT first_name, username, verified, developer FROM users WHERE id = $1", [friendId]);
 
       // Get updated counts
       const userCount = await db.query("SELECT COUNT(*) FROM friends WHERE friend_id = $1 AND status = 'pending'", [userId]);
       const friendCount = await db.query("SELECT COUNT(*) FROM friends WHERE friend_id = $1 AND status = 'pending'", [friendId]);
 
-      // Notify both users
+      // Notify both users via unified notification system
       await producer.send({
-        topic: 'friend-events',
+        topic: 'notification-creation-jobs',
         messages: [
           {
             key: String(userId),
             value: JSON.stringify({
-              event: 'friendRequestAccepted',
+              type: 'FRIEND_REQUEST_ACCEPTED',
               payload: {
-                userId: userId,
-                friendId: friendId,
-                friendName: friendInfo.rows[0].first_name,
-                requestCount: userCount.rows[0].count,
-                timestamp: new Date().toISOString()
+                recipientId: userId,
+                acceptorId: friendId,
+                acceptorUsername: friendInfo.rows[0].username,
+                acceptorVerified: friendInfo.rows[0].verified || false,
+                acceptorDeveloper: friendInfo.rows[0].developer || false,
+                requestCount: userCount.rows[0].count
               }
             })
           },
           {
             key: String(friendId),
             value: JSON.stringify({
-              event: 'friendRequestAccepted',
+              type: 'FRIEND_REQUEST_ACCEPTED',
               payload: {
-                userId: friendId,
-                friendId: userId,
-                friendName: userInfo.rows[0].first_name,
-                requestCount: friendCount.rows[0].count,
-                timestamp: new Date().toISOString()
+                recipientId: friendId,
+                acceptorId: userId,
+                acceptorUsername: userInfo.rows[0].username,
+                acceptorVerified: userInfo.rows[0].verified || false,
+                acceptorDeveloper: userInfo.rows[0].developer || false,
+                requestCount: friendCount.rows[0].count
               }
             })
           }
@@ -191,40 +197,38 @@ router.post("/send-request", authenticateToken, async (req, res) => {
     await client.query('COMMIT');
 
     // Get user info for notification
-    const userInfo = await db.query("SELECT first_name FROM users WHERE id = $1", [userId]);
+    const userInfo = await db.query("SELECT first_name, username, verified, developer FROM users WHERE id = $1", [userId]);
     const friendCount = await db.query(
       "SELECT COUNT(*) FROM friends WHERE friend_id = $1 AND status = 'pending'",
       [friendId]
     );
 
-    // Publish friend request event to Kafka (with offline queue support)
+    // Publish unified notification event
+    const notificationEvent = {
+      type: 'FRIEND_REQUEST_RECEIVED',
+      payload: {
+        recipientId: friendId,
+        senderId: userId,
+        senderUsername: userInfo.rows[0].username,
+        senderVerified: userInfo.rows[0].verified || false,
+        senderDeveloper: userInfo.rows[0].developer || false,
+        requestCount: friendCount.rows[0].count
+      }
+    };
+
+    console.log(`📤 Publishing FRIEND_REQUEST_RECEIVED notification to Kafka:`, notificationEvent);
+
     await producer.send({
-      topic: 'friend-events',
+      topic: 'notification-creation-jobs',
       messages: [
         {
-          key: String(friendId),
-          value: JSON.stringify({
-            event: 'newFriendRequest',
-            payload: {
-              senderId: userId,
-              senderName: userInfo.rows[0].first_name,
-              requestCount: friendCount.rows[0].count,
-              timestamp: new Date().toISOString()
-            }
-          })
-        },
-      ],
+          key: String(friendId), // Partition by recipient
+          value: JSON.stringify(notificationEvent)
+        }
+      ]
     });
 
-    // Queue for offline delivery
-    await queueOfflineNotification(friendId, 'newFriendRequest', {
-      senderId: userId,
-      senderName: userInfo.rows[0].first_name,
-      requestCount: friendCount.rows[0].count,
-      timestamp: new Date().toISOString()
-    });
-
-    console.log(`Friend request event published to Kafka for user ${friendId}`);
+    console.log(`✅ Friend request notification published to Kafka for user ${friendId}`);
 
     res.status(201).json({ message: "Friend request sent." });
   } catch (error) {
@@ -276,53 +280,49 @@ router.post("/accept-request", authenticateToken, async (req, res) => {
     await invalidateCache(userId);
     await invalidateCache(friendId);
 
+    // Clear notification deduplication keys to allow future interactions
+    await clearNotificationDedupeKeys(userId, friendId);
+
     // Get user names and counts
-    const receiverName = await db.query("SELECT first_name FROM users WHERE id = $1", [userId]);
-    const senderName = await db.query("SELECT first_name FROM users WHERE id = $1", [friendId]);
+    const receiverInfo = await db.query("SELECT first_name, username, verified, developer FROM users WHERE id = $1", [userId]);
+    const senderInfo = await db.query("SELECT first_name, username, verified, developer FROM users WHERE id = $1", [friendId]);
     const receiverCount = await db.query("SELECT COUNT(*) FROM friends WHERE friend_id = $1 AND status = 'pending'", [userId]);
     const senderCount = await db.query("SELECT COUNT(*) FROM friends WHERE friend_id = $1 AND status = 'pending'", [friendId]);
 
-    // Notify both users
+    // Publish unified notification events for both users
+    console.log(`📤 Publishing FRIEND_REQUEST_ACCEPTED notifications for users ${friendId} and ${userId}`);
+
     await producer.send({
-      topic: 'friend-events',
+      topic: 'notification-creation-jobs',
       messages: [
         {
-          key: String(friendId),
+          key: String(friendId), // Notify original requester
           value: JSON.stringify({
-            event: 'friendRequestAccepted',
+            type: 'FRIEND_REQUEST_ACCEPTED',
             payload: {
-              userId: friendId,
-              friendId: userId,
-              friendName: receiverName.rows[0].first_name,
-              requestCount: senderCount.rows[0].count,
-              timestamp: new Date().toISOString()
+              recipientId: friendId,
+              acceptorId: userId,
+              acceptorUsername: receiverInfo.rows[0].username,
+              acceptorVerified: receiverInfo.rows[0].verified || false,
+              acceptorDeveloper: receiverInfo.rows[0].developer || false,
+              requestCount: senderCount.rows[0].count
             }
           })
         },
         {
-          key: String(userId),
+          key: String(userId), // Update badge count for acceptor
           value: JSON.stringify({
-            event: 'friendRequestAccepted',
+            type: 'BADGE_COUNT_UPDATE',
             payload: {
-              userId: userId,
-              friendId: friendId,
-              friendName: senderName.rows[0].first_name,
-              requestCount: receiverCount.rows[0].count,
-              timestamp: new Date().toISOString()
+              recipientId: userId,
+              requestCount: receiverCount.rows[0].count
             }
           })
         }
-      ],
+      ]
     });
 
-    // Queue for offline delivery
-    await queueOfflineNotification(friendId, 'friendRequestAccepted', {
-      userId: friendId,
-      friendId: userId,
-      friendName: receiverName.rows[0].first_name,
-      requestCount: senderCount.rows[0].count,
-      timestamp: new Date().toISOString()
-    });
+    console.log(`✅ FRIEND_REQUEST_ACCEPTED notifications published to Kafka`);
 
     res.json({ message: "Friend request accepted." });
   } catch (error) {
@@ -331,6 +331,34 @@ router.post("/accept-request", authenticateToken, async (req, res) => {
     res.status(500).json({ message: "Server error" });
   } finally {
     client.release();
+  }
+});
+
+// Reject Friend Request
+router.post("/reject-request", authenticateToken, async (req, res) => {
+  const userId = req.user.userId;
+  const { friendId } = req.body;
+
+  try {
+    const result = await db.query(
+      "DELETE FROM friends WHERE user_id = $1 AND friend_id = $2 AND status = 'pending'",
+      [friendId, userId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: "No pending friend request found to reject." });
+    }
+
+    // Invalidate cache since the pending list has changed
+    await invalidateCache(userId);
+
+    // Clear notification deduplication keys to allow future requests
+    await clearNotificationDedupeKeys(userId, friendId);
+
+    res.status(200).json({ message: "Friend request rejected." });
+  } catch (error) {
+    console.error("Error rejecting friend request:", error);
+    res.status(500).json({ message: "Server error" });
   }
 });
 
@@ -438,20 +466,22 @@ router.get("/list", authenticateToken, async (req, res) => {
   try {
     // Comprehensive friends query with soft delete and versioning
     let query = `
-      SELECT 
-        users.id AS friend_id, 
-        users.username, 
-        users.first_name, 
-        users.last_name, 
+      SELECT
+        users.id AS friend_id,
+        users.username,
+        users.first_name,
+        users.last_name,
+        users.verified,
+        users.developer,
         friends.created_at,
-        CASE 
+        CASE
           WHEN friends.deleted_at IS NOT NULL THEN 'deleted'
           ELSE 'active'
         END AS friend_status
-      FROM friends 
-      JOIN users ON users.id = friends.friend_id 
-      WHERE 
-        friends.user_id = $1 
+      FROM friends
+      JOIN users ON users.id = friends.friend_id
+      WHERE
+        friends.user_id = $1
         AND friends.status = $2
         AND (friends.deleted_at IS NULL OR friends.deleted_at > NOW() - INTERVAL '30 days')`;
 
@@ -523,32 +553,47 @@ router.delete("/friends/:friendId", authenticateToken, async (req, res) => {
 });
 
 
-// Add an invalidate cache helper function
+// Optimized cache invalidation using specific key patterns
 const invalidateCache = async (userId) => {
   try {
-    // Get all cache keys for this user using pattern matching
-    const keys = await redis.keys(`*${userId}*`);
-    if (keys.length > 0) {
-      await redis.del(...keys);
-    }
-    console.log(`Cache invalidated for user ${userId} (${keys.length} keys deleted)`);
+    // Use specific key patterns instead of wildcard matching
+    const keysToDelete = [
+      `pending_requests:${userId}`,
+      `pending_requests_count:${userId}`,
+      `friends_list:${userId}:accepted`,
+      `friends_list:${userId}:pending`
+    ];
+
+    // Delete keys that exist
+    const pipeline = redis.pipeline();
+    keysToDelete.forEach(key => pipeline.del(key));
+    await pipeline.exec();
+
+    console.log(`Cache invalidated for user ${userId} (${keysToDelete.length} specific keys)`);
   } catch (error) {
     console.error(`Error invalidating cache for user ${userId}:`, error);
   }
 };
 
-// Helper function to queue notifications for offline users
-const queueOfflineNotification = async (userId, event, payload) => {
+// Removed queueOfflineNotification - now handled by unified notification service
+
+// Clear notification deduplication keys between two users
+const clearNotificationDedupeKeys = async (userId1, userId2) => {
   try {
-    const notification = JSON.stringify({ event, payload, timestamp: Date.now() });
-    await redis.lpush(`offline_notifications:${userId}`, notification);
-    // Keep only last 100 notifications per user
-    await redis.ltrim(`offline_notifications:${userId}`, 0, 99);
-    // Expire after 7 days
-    await redis.expire(`offline_notifications:${userId}`, 604800);
-    console.log(`Queued offline notification for user ${userId}`);
+    const keysToDelete = [
+      `notif_dedup:${userId1}:FRIEND_REQUEST_RECEIVED:${userId2}`,
+      `notif_dedup:${userId1}:FRIEND_REQUEST_ACCEPTED:${userId2}`,
+      `notif_dedup:${userId2}:FRIEND_REQUEST_RECEIVED:${userId1}`,
+      `notif_dedup:${userId2}:FRIEND_REQUEST_ACCEPTED:${userId1}`
+    ];
+
+    const pipeline = redis.pipeline();
+    keysToDelete.forEach(key => pipeline.del(key));
+    await pipeline.exec();
+
+    console.log(`Cleared notification dedupe keys between ${userId1} and ${userId2}`);
   } catch (error) {
-    console.error(`Error queuing offline notification:`, error);
+    console.error(`Error clearing notification dedupe keys:`, error);
   }
 };
 

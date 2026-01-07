@@ -63,6 +63,10 @@ router.post("/send", authenticateToken, userRateLimiter, async (req, res) => {
       }]
     });
 
+    // Invalidate friends overview cache for both users
+    await redis.del(`friends_overview:${senderId}`);
+    await redis.del(`friends_overview:${receiverId}`);
+
     // Return immediately (async processing)
     res.status(202).json({
       messageId,
@@ -128,6 +132,12 @@ router.get("/history/:conversationId", authenticateToken, userRateLimiter, async
 
     const result = await db.query(query, params);
 
+    console.log(`📥 Fetching history for ${conversationId}: Found ${result.rows.length} messages`);
+    if (result.rows.length > 0) {
+      console.log(`   Latest sequence ID: ${result.rows[0].sequence_id}`);
+      console.log(`   Oldest sequence ID: ${result.rows[result.rows.length - 1].sequence_id}`);
+    }
+
     res.json({
       messages: result.rows.reverse(), // Oldest first
       hasMore: result.rows.length === parseInt(limit)
@@ -168,6 +178,9 @@ router.post("/mark-read", authenticateToken, async (req, res) => {
         })
       }]
     });
+
+    // Invalidate friends overview cache
+    await redis.del(`friends_overview:${userId}`);
 
     res.json({ status: 'queued' });
 
@@ -340,6 +353,91 @@ router.get("/conversations", authenticateToken, async (req, res) => {
   } catch (error) {
     console.error("Error fetching conversations:", error);
     res.status(500).json({ message: "Failed to fetch conversations" });
+  }
+});
+
+// GET /messages/friends-overview - Optimized endpoint for friends list with message preview
+router.get("/friends-overview", authenticateToken, async (req, res) => {
+  const userId = req.user.userId;
+
+  try {
+    // Check Redis cache first (5 minute cache)
+    const cacheKey = `friends_overview:${userId}`;
+    const cached = await redis.get(cacheKey);
+
+    if (cached) {
+      return res.json(JSON.parse(cached));
+    }
+
+    // Optimized query using CTEs and proper indexes
+    const result = await db.query(`
+      WITH friend_conversations AS (
+        -- Get all friends with their conversation IDs
+        SELECT
+          f.friend_id,
+          CASE
+            WHEN $1 < f.friend_id THEN $1 || '_' || f.friend_id
+            ELSE f.friend_id || '_' || $1
+          END as conversation_id
+        FROM friends f
+        WHERE f.user_id = $1 AND f.status = 'accepted'
+      ),
+      last_messages AS (
+        -- Get the last message for each conversation
+        SELECT DISTINCT ON (c.conversation_id)
+          c.conversation_id,
+          c.message,
+          c.message_type,
+          c.timestamp,
+          c.sender_id,
+          c.metadata
+        FROM chats c
+        INNER JOIN friend_conversations fc ON fc.conversation_id = c.conversation_id
+        WHERE c.deleted_at IS NULL
+        ORDER BY c.conversation_id, c.sequence_id DESC
+      ),
+      unread_counts AS (
+        -- Count unread messages per conversation
+        SELECT
+          c.conversation_id,
+          COUNT(*) as unread_count
+        FROM chats c
+        INNER JOIN friend_conversations fc ON fc.conversation_id = c.conversation_id
+        WHERE c.receiver_id = $1
+          AND c.read_at IS NULL
+          AND c.deleted_at IS NULL
+        GROUP BY c.conversation_id
+      )
+      SELECT
+        fc.friend_id,
+        fc.conversation_id,
+        lm.message as last_message,
+        lm.message_type,
+        lm.timestamp as last_message_timestamp,
+        lm.sender_id as last_message_sender_id,
+        lm.metadata as last_message_metadata,
+        COALESCE(uc.unread_count, 0) as unread_count
+      FROM friend_conversations fc
+      LEFT JOIN last_messages lm ON lm.conversation_id = fc.conversation_id
+      LEFT JOIN unread_counts uc ON uc.conversation_id = fc.conversation_id
+      ORDER BY
+        CASE WHEN lm.timestamp IS NULL THEN 1 ELSE 0 END,
+        lm.timestamp DESC NULLS LAST
+    `, [userId]);
+
+    const overview = {
+      friends: result.rows,
+      timestamp: new Date().toISOString()
+    };
+
+    // Cache for 5 minutes
+    await redis.set(cacheKey, JSON.stringify(overview), 'EX', 300);
+
+    res.json(overview);
+
+  } catch (error) {
+    console.error("Error fetching friends overview:", error);
+    res.status(500).json({ message: "Failed to fetch friends overview" });
   }
 });
 

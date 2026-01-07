@@ -106,6 +106,8 @@ flutter:
     - assets/way.svg
     - assets/home.svg
     - assets/profile.svg
+    - assets/developer.svg
+    - assets/verified.svg
 
 
   #   - images/a_dot_ham.jpeg

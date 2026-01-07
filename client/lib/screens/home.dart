@@ -6,6 +6,8 @@ import 'package:client/screens/chat_screen.dart';
 import 'package:client/screens/status_creation_screen.dart';
 import 'package:client/screens/status_viewer_screen.dart';
 import 'package:client/models/status.dart';
+import 'package:client/models/message.dart';
+import 'package:client/database/message_database.dart';
 import 'package:client/transitions/circular_page_route.dart';
 import 'package:client/widgets/segmented_status_ring.dart';
 import 'package:client/services/status_view_service.dart';
@@ -57,25 +59,30 @@ class _HomeState extends State<Home> {
   Map<String, bool> _typingStatus = {}; // conversationId -> is typing
   Map<String, String> _lastMessages = {}; // conversationId -> last message text
   late StreamSubscription<Map<String, dynamic>> _newMessageSubscription;
-  late StreamSubscription<Map<String, dynamic>> _typingIndicatorSubscription;
+  late StreamSubscription<Map<String, dynamic>> _typingIndicatorSubscription; // ADDED THIS LINE
   late StreamSubscription<Map<String, dynamic>> _readReceiptSubscription;
+  late StreamSubscription _homeNotificationStreamSubscription; // For home widget's notification listener
+  late StreamSubscription<void> _friendListUpdateSubscription; // For friend list updates
 
-  // Requests state
-  List<Map<String, dynamic>> _pendingRequests = [];
-  bool _isLoadingRequests = false;
-  bool _hasFetchedRequests = false;
+  // Notification state
+  int _unreadNotificationCount = 0;
 
   int _selectedIndex = 0;
   final List<String> _pageTitles = ["Home", "Search", "Notifications", "Profile"];
 
   void _onItemTapped(int index) {
-    if (index == 2 && !_hasFetchedRequests) {
-      fetchPendingRequests();
-    }
-
     if (_selectedIndex != index) {
       _scrollController.jumpTo(0);
     }
+
+    if (index == 2) {
+      // User tapped on the notifications tab
+      setState(() {
+        _unreadNotificationCount = 0; // Reset unread count
+      });
+      apiService.markAllNotificationsAsRead(); // Mark all as read on backend
+    }
+
     setState(() {
       _selectedIndex = index;
     });
@@ -100,22 +107,26 @@ class _HomeState extends State<Home> {
       
       fetchRequestCount();
 
-      // Open the Hive box first
-      _openFriendsBox().then((_) {
-        fetchFriends().then((_) {
-          // Fetch unread counts after friends are loaded
-          _fetchUnreadCounts();
-        });
-      });
-
-      // Load statuses
+      // Load statuses (async, doesn't block)
       _loadStatuses();
 
-      // Setup status WebSocket listeners
+      // Setup WebSocket listeners BEFORE connecting
       _setupStatusListeners();
-
-      // Setup message WebSocket listeners
       _setupMessageListeners();
+
+      // CRITICAL: Load friends FIRST, THEN connect socket
+      // This ensures the UI is ready to display delivered messages
+      _openFriendsBox().then((_) async {
+        await fetchFriends();
+        // Fetch unread counts after friends are loaded
+        await _fetchUnreadCounts();
+
+        // NOW connect the WebSocket after everything is ready
+        apiService.connectWebSocket(uuid);
+        if (kDebugMode) {
+          print("✅ WebSocket connected after friends loaded - ready for queued messages");
+        }
+      });
 
       // Update location on app launch/login
       _updateLocationOnLaunch();
@@ -128,105 +139,46 @@ class _HomeState extends State<Home> {
         });
       });
 
-      _pendingFriendRequestsSubscription = apiService.pendingRequestsStream
-          .listen((count) {
-            setState(() {
+                _pendingFriendRequestsSubscription = apiService.pendingRequestsStream
+                    .listen((count) {
+                      setState(() {
+                      });
+                    });
+      
+            // Listen for new notifications in the Home widget
+            _homeNotificationStreamSubscription = apiService.newNotificationStream.listen((notification) {
+              if (!mounted) return;
+
+              final type = notification['type'];
+
+              // Increment unread count for unread notifications
+              if (notification['read'] == false || notification['read'] == null) {
+                setState(() {
+                  _unreadNotificationCount++;
+                });
+              }
+
+              // Refresh friend list when a friend request is accepted
+              if (type == 'FRIEND_REQUEST_ACCEPTED') {
+                if (kDebugMode) {
+                  print('🎉 Friend request accepted! Refreshing friend list...');
+                }
+                // Refresh friend list in the background
+                fetchFriends();
+              }
             });
-          });
-    }).catchError((error) {
-      _showErrorDialog(error.toString()); // Show error dialog
+
+            // Listen for friend list update triggers (when user accepts a request)
+            _friendListUpdateSubscription = apiService.friendListUpdateStream.listen((_) {
+              if (mounted) {
+                if (kDebugMode) {
+                  print('🎉 Refreshing friend list after accepting request...');
+                }
+                fetchFriends();
+              }
+            });
+          }).catchError((error) {      _showErrorDialog(error.toString()); // Show error dialog
     });
-  }
-
-  Future<void> fetchPendingRequests() async {
-    setState(() {
-      _isLoadingRequests = true;
-      _hasFetchedRequests = true;
-    });
-    try {
-      if (kDebugMode) {
-        print('Fetching pending friend requests...');
-      }
-      final requests = await apiService.fetchPendingFriendRequests();
-      if (kDebugMode) {
-        print('Fetched pending requests: $requests');
-      }
-      setState(() {
-        _pendingRequests = requests;
-        _isLoadingRequests = false;
-      });
-    } catch (error) {
-      if (kDebugMode) {
-        print('Error fetching pending requests: $error');
-      }
-      setState(() {
-        _isLoadingRequests = false;
-      });
-    }
-  }
-
-  Future<void> acceptFriendRequest(String friendId) async {
-    // Save the request in case we need to rollback
-    final requestToRemove = _pendingRequests.firstWhere((request) => request['id'] == friendId);
-    final int originalIndex = _pendingRequests.indexOf(requestToRemove);
-
-    // Optimistic UI update - remove immediately
-    setState(() {
-      _pendingRequests.removeWhere((request) => request['id'] == friendId);
-    });
-
-    try {
-      await apiService.acceptFriendRequest(friendId);
-      // Success - UI already updated
-    } catch (error) {
-      if (kDebugMode) {
-        print('Error accepting friend request: $error');
-      }
-
-      // Rollback on error - restore the request
-      setState(() {
-        _pendingRequests.insert(originalIndex, requestToRemove);
-      });
-
-      // Show error to user
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to accept friend request. Please try again.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> rejectFriendRequest(String friendId) async {
-    final requestToRemove = _pendingRequests.firstWhere((request) => request['id'] == friendId);
-    final int originalIndex = _pendingRequests.indexOf(requestToRemove);
-
-    setState(() {
-      _pendingRequests.removeWhere((request) => request['id'] == friendId);
-    });
-
-    try {
-      // Assuming a rejectFriendRequest method exists in the apiService.
-      // await apiService.rejectFriendRequest(friendId);
-    } catch (error) {
-      if (kDebugMode) {
-        print('Error rejecting friend request: $error');
-      }
-      setState(() {
-        _pendingRequests.insert(originalIndex, requestToRemove);
-      });
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to reject friend request. Please try again.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
   }
 
   String formatRelativeTime(String isoString) {
@@ -235,17 +187,24 @@ class _HomeState extends State<Home> {
     final difference = now.difference(then);
 
     if (difference.inDays > 365) {
-      return '${(difference.inDays / 365).floor()}y';
+      final years = (difference.inDays / 365).floor();
+      return '${years}y';
+    } else if (difference.inDays >= 30) {
+      final months = (difference.inDays / 30).floor();
+      return '${months}M';
     } else if (difference.inDays >= 7) {
-      return '${(difference.inDays / 7).floor()}w';
+      final weeks = (difference.inDays / 7).floor();
+      return '${weeks}w';
     } else if (difference.inDays > 0) {
       return '${difference.inDays}d';
     } else if (difference.inHours > 0) {
       return '${difference.inHours}h';
     } else if (difference.inMinutes > 0) {
       return '${difference.inMinutes}m';
+    } else if (difference.inSeconds > 0) {
+      return '${difference.inSeconds}s';
     } else {
-      return 'now';
+      return 'Just Now';
     }
   }
 
@@ -368,7 +327,10 @@ class _HomeState extends State<Home> {
 
     uuid = userUuid;
     apiService = ApiService();
-    apiService.init(uuid);
+
+    // Initialize API service but DON'T connect socket yet
+    apiService.init(uuid, connectSocket: false);
+
     if (kDebugMode) {
       print("API Service Initialized Successfully for UUID: $uuid");
     }
@@ -461,9 +423,23 @@ class _HomeState extends State<Home> {
 
   void _setupMessageListeners() {
     // Listen for new messages
-    _newMessageSubscription = apiService.newMessageStream.listen((data) {
+    _newMessageSubscription = apiService.newMessageStream.listen((data) async {
       if (kDebugMode) {
         print('New message received: $data');
+      }
+
+      // CRITICAL: Save message to local database immediately
+      // This ensures it's available when opening the chat screen
+      try {
+        final message = Message.fromJson(data);
+        await MessageDatabase.insertMessage(message);
+        if (kDebugMode) {
+          print('✅ Saved message to local DB from home screen: ${message.messageId}');
+        }
+      } catch (e) {
+        if (kDebugMode) {
+          print('❌ Error saving message to local DB: $e');
+        }
       }
 
       // Update unread count and last message for the conversation
@@ -602,6 +578,8 @@ class _HomeState extends State<Home> {
     _newMessageSubscription.cancel();
     _typingIndicatorSubscription.cancel();
     _readReceiptSubscription.cancel();
+    _homeNotificationStreamSubscription.cancel(); // Cancel subscription
+    _friendListUpdateSubscription.cancel(); // Cancel friend list update subscription
     apiService.disconnectWebSocket();
 
     _scrollController.dispose();
@@ -661,18 +639,74 @@ class _HomeState extends State<Home> {
               label: '',
             ),
             BottomNavigationBarItem(
-              icon: SizedBox(
-                width: 24,
-                height: 24,
-                child: Opacity(
-                  opacity: 0.5,
-                  child: Icon(CupertinoIcons.bell, color: Colors.white),
-                ),
+              icon: Stack(
+                children: [
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: Opacity(
+                      opacity: 0.5,
+                      child: Icon(CupertinoIcons.bell, color: Colors.white),
+                    ),
+                  ),
+                  if (_unreadNotificationCount > 0)
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(1),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 12,
+                          minHeight: 12,
+                        ),
+                        child: Text(
+                          _unreadNotificationCount.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 8,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    )
+                ],
               ),
-              activeIcon: SizedBox(
-                width: 24,
-                height: 24,
-                child: Icon(CupertinoIcons.bell, color: Colors.white),
+              activeIcon: Stack(
+                children: [
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: Icon(CupertinoIcons.bell, color: Colors.white),
+                  ),
+                  if (_unreadNotificationCount > 0)
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(1),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 12,
+                          minHeight: 12,
+                        ),
+                        child: Text(
+                          _unreadNotificationCount.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 8,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    )
+                ],
               ),
               label: '',
             ),
@@ -855,10 +889,7 @@ class _HomeState extends State<Home> {
                 ),
           ] else if (_selectedIndex == 2) ...[
             NotificationsScreen(
-              isLoadingRequests: _isLoadingRequests,
-              pendingRequests: _pendingRequests,
-              acceptFriendRequest: acceptFriendRequest,
-              rejectFriendRequest: rejectFriendRequest,
+              apiService: apiService,
               formatRelativeTime: formatRelativeTime,
             )
           ] else ...[
@@ -896,7 +927,7 @@ class _HomeState extends State<Home> {
 
           // Real data from WebSocket streams
           final bool isTyping = _typingStatus[conversationId] ?? false;
-          // final int unreadCount = _unreadCounts[conversationId] ?? 0;
+          final int unreadCount = _unreadCounts[conversationId] ?? 0;
 
           // Mock data for features not yet implemented
 
@@ -988,16 +1019,24 @@ class _HomeState extends State<Home> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Name at the top
-                              Text(
-                                '${user['first_name']} ${user['last_name']}',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w500,
-                                  fontSize: 15,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                              // Name at the top with badge
+                              Row(
+                                children: [
+                                  Text(
+                                    '${user['first_name']} ${user['last_name']}',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 15,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  if (user['developer'] == true || user['verified'] == true) ...[
+                                    const SizedBox(width: 6),
+                                    _buildVerificationBadge(user['developer'] == true, user['verified'] == true),
+                                  ],
+                                ],
                               ),
                               SizedBox(height: 4),
                               // Message and timestamp below name
@@ -1010,49 +1049,73 @@ class _HomeState extends State<Home> {
                                         fontStyle: FontStyle.italic,
                                       ),
                                     )
-                                  : RichText(
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      text: TextSpan(
-                                        children: [
-                                          TextSpan(
-                                            text: lastMessage,
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w400,
-                                              fontSize: 13,
-                                            ),
+                                  : unreadCount > 0
+                                      ? RichText(
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          text: TextSpan(
+                                            children: [
+                                              TextSpan(
+                                                text: '$unreadCount New Message${unreadCount > 1 ? 's' : ''}',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                              TextSpan(
+                                                text: ' • ',
+                                                style: TextStyle(
+                                                  color: Color(0xFF8E8E93),
+                                                  fontWeight: FontWeight.w400,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                              TextSpan(
+                                                text: timestamp,
+                                                style: TextStyle(
+                                                  color: Color(0xFF8E8E93),
+                                                  fontWeight: FontWeight.w400,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                          TextSpan(
-                                            text: ' • ',
-                                            style: TextStyle(
-                                              color: Color(0xFF8E8E93),
-                                              fontWeight: FontWeight.w400,
-                                              fontSize: 12,
-                                            ),
+                                        )
+                                      : RichText(
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          text: TextSpan(
+                                            children: [
+                                              TextSpan(
+                                                text: lastMessage,
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w400,
+                                                  fontSize: 13,
+                                                ),
+                                              ),
+                                              TextSpan(
+                                                text: ' • ',
+                                                style: TextStyle(
+                                                  color: Color(0xFF8E8E93),
+                                                  fontWeight: FontWeight.w400,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                              TextSpan(
+                                                text: timestamp,
+                                                style: TextStyle(
+                                                  color: Color(0xFF8E8E93),
+                                                  fontWeight: FontWeight.w400,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                          TextSpan(
-                                            text: timestamp,
-                                            style: TextStyle(
-                                              color: Color(0xFF8E8E93),
-                                              fontWeight: FontWeight.w400,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
+                                        ),
                             ],
                           ),
-                        ),
-                        // Camera icon on the right, vertically centered
-                        IconButton(
-                          icon: Icon(CupertinoIcons.camera, color: Colors.white.withValues(alpha: 0.5), size: 21),
-                          onPressed: () {
-                            // TODO: Implement camera functionality
-                          },
-                          padding: EdgeInsets.zero,
-                          constraints: BoxConstraints(),
                         ),
                       ],
                     ),
@@ -1078,7 +1141,7 @@ class _HomeState extends State<Home> {
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.white.withOpacity(0.2),
+            backgroundColor: Colors.white.withValues(alpha: 0.2),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
@@ -1357,5 +1420,23 @@ class _HomeState extends State<Home> {
         ),
       ),
     );
+  }
+
+  Widget _buildVerificationBadge(bool isDeveloper, bool isVerified) {
+    // Developer badge takes priority
+    if (isDeveloper) {
+      return SvgPicture.asset(
+        'assets/developer.svg',
+        width: 16,
+        height: 16,
+      );
+    } else if (isVerified) {
+      return SvgPicture.asset(
+        'assets/verified.svg',
+        width: 16,
+        height: 16,
+      );
+    }
+    return const SizedBox.shrink();
   }
 }

@@ -1,0 +1,43 @@
+🔵 Connecting to standalone Redis (development mode)...
+{"level":"info","message":"Email transporter initialized","timestamp":"2026-01-07T12:12:31.197Z"}
+Server running on http://localhost:3000/
+✅ Redis client connected
+[WARN] This Redis server's `default` user does not require a password, but a password was supplied
+✅ Redis client ready
+(node:8735) TimeoutNegativeWarning: -1767787951490 is a negative number.
+Timeout duration was set to 1.
+(Use `node --trace-warnings ...` to show where the warning was created)
+Kafka consumer connected and subscribed to friend-events
+{"level":"INFO","timestamp":"2026-01-07T12:12:31.498Z","logger":"kafkajs","message":"[Consumer] Starting","groupId":"friend-events-group"}
+Kafka consumer subscribed to friend-events
+{"level":"INFO","timestamp":"2026-01-07T12:12:31.502Z","logger":"kafkajs","message":"[Consumer] Starting","groupId":"status-events-group"}
+Notification consumer subscribed to notification-creation-jobs
+Message consumer subscribed to chat-messages
+Typing consumer subscribed to typing-indicators
+Receipt consumer subscribed to read-receipts
+Connected to Kafka (all producers and consumers)
+All Kafka clients connected
+RedisGraph module is connected and responsive.
+Connected to RedisGraph and initialized graph: social_graph
+Graph database connected.
+[NotificationService] Starting consumer run loop...
+{"level":"INFO","timestamp":"2026-01-07T12:12:31.548Z","logger":"kafkajs","message":"[Consumer] Starting","groupId":"notification-service-group"}
+{"level":"INFO","timestamp":"2026-01-07T12:12:55.254Z","logger":"kafkajs","message":"[ConsumerGroup] Consumer has joined the group","groupId":"status-events-group","memberId":"messenger-app-eece1123-3e14-41e1-8af7-8ca4782e9a7d","leaderId":"messenger-app-eece1123-3e14-41e1-8af7-8ca4782e9a7d","isLeader":true,"memberAssignment":{"status-events":[0]},"groupProtocol":"RoundRobinAssigner","duration":23752}
+✅ Status consumer connected and subscribed to status-events
+{"level":"INFO","timestamp":"2026-01-07T12:12:55.257Z","logger":"kafkajs","message":"[ConsumerGroup] Consumer has joined the group","groupId":"friend-events-group","memberId":"messenger-app-ca186e18-b30a-430e-ab91-612cb4005305","leaderId":"messenger-app-ca186e18-b30a-430e-ab91-612cb4005305","isLeader":true,"memberAssignment":{"friend-events":[0]},"groupProtocol":"RoundRobinAssigner","duration":23758}
+{"level":"INFO","timestamp":"2026-01-07T12:12:55.257Z","logger":"kafkajs","message":"[ConsumerGroup] Consumer has joined the group","groupId":"notification-service-group","memberId":"messenger-app-df812440-b68d-4a04-b14b-6c1386fc783f","leaderId":"messenger-app-df812440-b68d-4a04-b14b-6c1386fc783f","isLeader":true,"memberAssignment":{"notification-creation-jobs":[0]},"groupProtocol":"RoundRobinAssigner","duration":23709}
+Notification service consumer started.
+{"level":"INFO","timestamp":"2026-01-07T12:12:55.257Z","logger":"kafkajs","message":"[Consumer] Starting","groupId":"message-delivery-group"}
+{"level":"INFO","timestamp":"2026-01-07T12:12:58.281Z","logger":"kafkajs","message":"[ConsumerGroup] Consumer has joined the group","groupId":"message-delivery-group","memberId":"messenger-app-47a17580-c9d3-42d8-8f8c-32a538af177b","leaderId":"messenger-app-47a17580-c9d3-42d8-8f8c-32a538af177b","isLeader":true,"memberAssignment":{"chat-messages":[0]},"groupProtocol":"RoundRobinAssigner","duration":3024}
+✅ Message consumer started
+{"level":"INFO","timestamp":"2026-01-07T12:12:58.282Z","logger":"kafkajs","message":"[Consumer] Starting","groupId":"typing-broadcast-group"}
+{"level":"INFO","timestamp":"2026-01-07T12:13:01.300Z","logger":"kafkajs","message":"[ConsumerGroup] Consumer has joined the group","groupId":"typing-broadcast-group","memberId":"messenger-app-24ca9dad-8a8f-46b2-9692-b9dc88ffd8aa","leaderId":"messenger-app-24ca9dad-8a8f-46b2-9692-b9dc88ffd8aa","isLeader":true,"memberAssignment":{"typing-indicators":[0]},"groupProtocol":"RoundRobinAssigner","duration":3017}
+✅ Typing consumer started
+{"level":"INFO","timestamp":"2026-01-07T12:13:01.301Z","logger":"kafkajs","message":"[Consumer] Starting","groupId":"receipt-update-group"}
+{"level":"INFO","timestamp":"2026-01-07T12:13:04.337Z","logger":"kafkajs","message":"[ConsumerGroup] Consumer has joined the group","groupId":"receipt-update-group","memberId":"messenger-app-af9daa9e-86a8-4ebb-be6a-dc6d85a54488","leaderId":"messenger-app-af9daa9e-86a8-4ebb-be6a-dc6d85a54488","isLeader":true,"memberAssignment":{"read-receipts":[0]},"groupProtocol":"RoundRobinAssigner","duration":3036}
+✅ Receipt consumer started
+✅ Chat message service started (all 3 consumers running)
+Chat message service started.
+PostgreSQL Connected...
+{"level":"error","message":"Failed to ensure user node in graph for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Unknown function 'datetime'","timestamp":"2026-01-07T12:13:19.602Z"}
+{"level":"info","message":"User logged in: rdreyer523@gmail.com from IP: ::1","timestamp":"2026-01-07T12:13:19.621Z"}

@@ -71,6 +71,8 @@ router.get('/:userId', authenticateToken, async (req, res) => {
             u.country_code AS "countryCode",
             u.state,
             u.city,
+            u.verified,
+            u.developer,
             100 AS score
           FROM users u
           WHERE u.id != $1
@@ -101,6 +103,8 @@ router.get('/:userId', authenticateToken, async (req, res) => {
             u.country_code AS "countryCode",
             u.state,
             u.city,
+            u.verified,
+            u.developer,
             70 AS score
           FROM users u
           WHERE u.id != $1
@@ -131,6 +135,8 @@ router.get('/:userId', authenticateToken, async (req, res) => {
             u.country_code AS "countryCode",
             u.state,
             u.city,
+            u.verified,
+            u.developer,
             CASE
               WHEN u.country_code = ANY($2::text[]) THEN 50
               ELSE 30
@@ -163,6 +169,8 @@ router.get('/:userId', authenticateToken, async (req, res) => {
           u.country_code AS "countryCode",
           u.state,
           u.city,
+          u.verified,
+          u.developer,
           10 AS score
         FROM users u
         WHERE u.id != $1
@@ -228,6 +236,8 @@ router.get('/search/:userId', authenticateToken, async (req, res) => {
         u.country_code AS "countryCode",
         u.state,
         u.city,
+        u.verified,
+        u.developer,
         CASE
           WHEN f1.status = 'accepted' OR f2.status = 'accepted' THEN 'friend'
           WHEN f1.status = 'pending' OR f2.status = 'pending' THEN 'pending'

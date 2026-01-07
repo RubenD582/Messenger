@@ -14,7 +14,7 @@ import 'package:flutter/material.dart';
 
 import 'package:flutter/cupertino.dart';
 
-import 'package:shimmer/shimmer.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
@@ -453,6 +453,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
     final friendStatus = user['friendStatus'] ?? 'none';
 
+    final isDeveloper = user['developer'] == true;
+
+    final isVerified = user['verified'] == true;
+
     final isRequested =
         _sentRequests.contains(userId) || friendStatus == 'pending';
 
@@ -503,20 +507,31 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               mainAxisSize: MainAxisSize.min,
 
               children: [
-                Text(
-                  username != null && username.isNotEmpty ? username : name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.2,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
+                // If friend, show full name with badge, otherwise show username
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        isFriend ? name : (username != null && username.isNotEmpty ? username : name),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: -0.2,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                    if (isDeveloper || isVerified) ...[
+                      const SizedBox(width: 6),
+                      _buildVerificationBadge(isDeveloper, isVerified),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 2,),
                 Text(
-                  suggestionReason,
+                  isFriend ? (username ?? '') : suggestionReason,
                   style: TextStyle(
                     color: Colors.grey[600],
                     fontSize: 14,
@@ -535,45 +550,26 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           const SizedBox(width: 12),
 
           // Add Button
-          SizedBox(
-            width: 60, // Reduced width
-            height: 30,
-            child: ElevatedButton(
-              onPressed:
-                  (isRequested || isFriend)
-                      ? null
-                      : () => _sendFriendRequest(userId),
-
-              style: ElevatedButton.styleFrom(
-                splashFactory: NoSplash.splashFactory,
-
-                backgroundColor:
-                    (isRequested || isFriend)
-                        ? Colors.white.withValues(alpha: 0.3)
-                        : Colors.white.withValues(alpha: 0.2), // Grey color
-
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(100),
-                ),
-
-                elevation: 0,
-
-                padding: EdgeInsets.zero,
+          GestureDetector(
+            onTap: (isRequested || isFriend)
+                ? null
+                : () => _sendFriendRequest(userId),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7),
+              decoration: BoxDecoration(
+                color: (isRequested || isFriend)
+                    ? const Color(0xFF262626)
+                    : Colors.white,
+                borderRadius: BorderRadius.circular(20),
               ),
-
               child: Text(
-                isFriend ? "Friend" : (isRequested ? "Added" : "Add"),
-
+                isFriend ? "Added" : (isRequested ? "Added" : "Add"),
                 style: TextStyle(
-                  fontSize: 13,
-
+                  fontSize: 12,
                   fontWeight: FontWeight.w600,
-
-                  color:
-                      (isRequested || isFriend)
-                          ? Colors.grey[500]
-                          : Colors.white, // White text
-
+                  color: (isRequested || isFriend)
+                      ? const Color(0xFF8E8E93)
+                      : Colors.black,
                   letterSpacing: -0.2,
                 ),
               ),
@@ -596,102 +592,22 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     );
   }
 
-  Widget _buildSuggestionsShimmer() {
-    return Shimmer.fromColors(
-      baseColor: Colors.grey[900]!,
-
-      highlightColor: Colors.grey[800]!,
-
-      child: ListView.builder(
-        itemCount: 8,
-
-        padding: const EdgeInsets.only(bottom: 20),
-
-        itemBuilder: (context, index) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 16),
-
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-
-              children: [
-                const CircleAvatar(
-                  radius: 24, // Increased size
-
-                  backgroundColor: Colors.black,
-                ),
-
-                const SizedBox(width: 14),
-
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-
-                    mainAxisSize: MainAxisSize.min,
-
-                    children: [
-                      Container(
-                        height: 16,
-
-                        width: 140,
-
-                        decoration: BoxDecoration(
-                          color: Colors.black,
-
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-
-                      const SizedBox(height: 6),
-
-                      Container(
-                        height: 13,
-
-                        width: 160,
-
-                        decoration: BoxDecoration(
-                          color: Colors.black,
-
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(width: 12),
-
-                Container(
-                  width: 60,
-
-                  height: 30,
-
-                  decoration: BoxDecoration(
-                    color: Colors.black,
-
-                    borderRadius: BorderRadius.circular(100),
-                  ),
-                ),
-
-                const SizedBox(width: 8),
-
-                Container(
-                  width: 20,
-
-                  height: 20,
-
-                  decoration: const BoxDecoration(
-                    color: Colors.black,
-
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ],
-            ),
-          );
-        },
-      ),
-    );
+  Widget _buildVerificationBadge(bool isDeveloper, bool isVerified) {
+    // Developer badge takes priority
+    if (isDeveloper) {
+      return SvgPicture.asset(
+        'assets/developer.svg',
+        width: 16,
+        height: 16,
+      );
+    } else if (isVerified) {
+      return SvgPicture.asset(
+        'assets/verified.svg',
+        width: 16,
+        height: 16,
+      );
+    }
+    return const SizedBox.shrink();
   }
 
   @override

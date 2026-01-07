@@ -74,28 +74,17 @@ module.exports = (io) => {
   io.on("connection", (socket) => {
     console.log("User connected:", socket.id, "UserId:", socket.userId);
 
-    // Auto-register with verified userId from JWT
+    // Auto-register with verified userId from JWT and join user's room
     (async () => {
       try {
-        // Store socket mapping in Redis with 24h expiry
+        // Join user-specific room for Socket.IO targeted emissions
+        socket.join(socket.userId);
+
+        // Store socket mapping in Redis with 24h expiry (for backward compatibility)
         await redis.setex(`user_socket:${socket.userId}`, 86400, socket.id);
-        console.log(`User ${socket.userId} auto-registered with socket ID: ${socket.id}`);
+        console.log(`User ${socket.userId} auto-registered and joined room with socket ID: ${socket.id}`);
 
-        // Deliver queued offline notifications
-        const notifications = await redis.lrange(`offline_notifications:${socket.userId}`, 0, -1);
-        if (notifications.length > 0) {
-          console.log(`Delivering ${notifications.length} queued notifications to ${socket.userId}`);
-
-          for (const notifStr of notifications) {
-            const notif = JSON.parse(notifStr);
-            socket.emit(notif.event, notif.payload);
-          }
-
-          // Clear delivered notifications
-          await redis.del(`offline_notifications:${socket.userId}`);
-        }
-
-        socket.emit("registered", { success: true, queuedNotifications: notifications.length });
+        socket.emit("registered", { success: true });
       } catch (error) {
         console.error(`Error auto-registering user ${socket.userId}:`, error);
         socket.emit("registered", { success: false, error: "Failed to register user" });
@@ -115,14 +104,21 @@ module.exports = (io) => {
     });
   });
 
-  // Function to invalidate user's cache in Redis
+  // Optimized cache invalidation using specific key patterns
   async function invalidateUserCache(userId) {
     try {
-      const keys = await redis.keys(`*${userId}*`);
-      if (keys.length > 0) {
-        await redis.del(...keys);
-      }
-      console.log(`Cache invalidated for user ${userId} (${keys.length} keys deleted)`);
+      const keysToDelete = [
+        `pending_requests:${userId}`,
+        `pending_requests_count:${userId}`,
+        `friends_list:${userId}:accepted`,
+        `friends_list:${userId}:pending`
+      ];
+
+      const pipeline = redis.pipeline();
+      keysToDelete.forEach(key => pipeline.del(key));
+      await pipeline.exec();
+
+      console.log(`Cache invalidated for user ${userId} (${keysToDelete.length} specific keys)`);
     } catch (error) {
       console.error(`Error invalidating cache for user ${userId}:`, error);
     }
