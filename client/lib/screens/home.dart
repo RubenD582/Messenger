@@ -61,27 +61,11 @@ class _HomeState extends State<Home> {
   late StreamSubscription<Map<String, dynamic>> _readReceiptSubscription;
 
   int _selectedIndex = 0;
+  final List<String> _pageTitles = ["Home", "Search", "Notifications", "Profile"];
 
   void _onItemTapped(int index) {
-    if (index == 2) {
-      // Bell icon tapped, show requests modal
-      showModalBottomSheet(
-        context: context,
-        backgroundColor: Colors.transparent,
-        isScrollControlled: true,
-        builder: (context) => ClipRRect(
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(24),
-            topRight: Radius.circular(24),
-          ),
-          child: Container(
-            color: Colors.black,
-            height: MediaQuery.of(context).size.height * 0.7,
-            child: const PendingRequestsScreen(),
-          ),
-        ),
-      );
-      return;
+    if (_selectedIndex != index) {
+      _scrollController.jumpTo(0);
     }
     setState(() {
       _selectedIndex = index;
@@ -582,144 +566,170 @@ class _HomeState extends State<Home> {
       body: CustomScrollView(
         controller: _scrollController,
         slivers: [
-          SliverAppBar(
-            backgroundColor: Colors.transparent,
-            floating: true,
-            pinned: true,
-            scrolledUnderElevation: 0.0,
-            expandedHeight: 60,
-            toolbarHeight: 40,
-            automaticallyImplyLeading: false,
-            flexibleSpace: Builder(
-              builder: (context) {
-                return Container(
-                  decoration: const BoxDecoration(color: AppColors.background),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            IconButton(
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => discover.DiscoverScreen(),
-                                  ),
-                                );
-                              },
-                              icon: const Icon(
-                                CupertinoIcons.search,
-                                color: Colors.white,
-                              ),
-                            ),
-                            Expanded(
-                              child: Center(
-                                child: SvgPicture.asset(
-                                  'assets/way.svg',
-                                  height: 20,
+          if (_selectedIndex != 0)
+            SliverAppBar(
+              backgroundColor: AppColors.background,
+              pinned: true,
+              centerTitle: true,
+              toolbarHeight: 40.0,
+              title: Text(
+                _pageTitles[_selectedIndex],
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            )
+          else
+            SliverAppBar(
+              backgroundColor: Colors.transparent,
+              floating: true,
+              pinned: true,
+              scrolledUnderElevation: 0.0,
+              expandedHeight: 60,
+              toolbarHeight: 40,
+              automaticallyImplyLeading: false,
+              flexibleSpace: Builder(
+                builder: (context) {
+                  return Container(
+                    decoration: const BoxDecoration(color: AppColors.background),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              IconButton(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => discover.DiscoverScreen(),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(
+                                  CupertinoIcons.search,
+                                  color: Colors.white,
                                 ),
                               ),
-                            ),
-                            IconButton(
-                              onPressed: () {
-                                _showSearchModal();
-                              },
-                              icon: const Icon(
-                                CupertinoIcons.square_pencil,
-                                color: Colors.white,
+                              Expanded(
+                                child: Center(
+                                  child: SvgPicture.asset(
+                                    'assets/way.svg',
+                                    height: 20,
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                onPressed: () {
+                                  _showSearchModal();
+                                },
+                                icon: const Icon(
+                                  CupertinoIcons.square_pencil,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          if (_selectedIndex == 0) ...[
+            // **Stories Bar (UI Mockup)**
+            if (selectedChip == "All" || selectedChip == "Status")
+              SliverPadding(
+                padding: const EdgeInsets.only(bottom: 12),
+                sliver: SliverToBoxAdapter(
+                  child: Transform.translate(
+                    offset: Offset(0, _scrollYOffset * 0.5),
+                    child: _buildStoriesBar(),
+                  ),
+                ),
+              ),
+
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                sliver: SliverToBoxAdapter(
+                child: Transform.translate(
+                  offset: Offset(0, _scrollYOffset * 0.75),
+                  child: Container(
+                    padding: const EdgeInsets.only(
+                      left: 12,
+                      right: 12,
+                    ),
+                    child: AnimatedOpacity(
+                      opacity: 1 - _scrollYOpacity,
+                      duration: const Duration(milliseconds: 200),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            chip("All"),
+                            const SizedBox(width: 6),
+                            chip("Pinned"),
+                            const SizedBox(width: 6),
+                            chip("Status"),
+                            const SizedBox(width: 6),
+                            Container(
+                              height: 32,
+                              width: 32,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Color(0xFF1C1C1E),
+                              ),
+                              child: Icon(
+                                Icons.add,
+                                color: Colors.white.withAlpha(150),
+                                size: 18,
                               ),
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-
-          // **Stories Bar (UI Mockup)**
-          if (selectedChip == "All" || selectedChip == "Status")
-            SliverPadding(
-              padding: const EdgeInsets.only(bottom: 12),
-              sliver: SliverToBoxAdapter(
-                child: Transform.translate(
-                  offset: Offset(0, _scrollYOffset * 0.5),
-                  child: _buildStoriesBar(),
-                ),
-              ),
-            ),
-
-            SliverPadding(
-              padding: const EdgeInsets.symmetric(vertical: 15),            
-              sliver: SliverToBoxAdapter(
-              child: Transform.translate(
-                offset: Offset(0, _scrollYOffset * 0.75),
-                child: Container(
-                  padding: const EdgeInsets.only(
-                    left: 12,
-                    right: 12,
-                  ),
-                  child: AnimatedOpacity(
-                    opacity: 1 - _scrollYOpacity,
-                    duration: const Duration(milliseconds: 200),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [
-                          chip("All"),
-                          const SizedBox(width: 6),
-                          chip("Pinned"),
-                          const SizedBox(width: 6),
-                          chip("Status"),
-                          const SizedBox(width: 6),
-                          Container(
-                            height: 32,
-                            width: 32,
-                            decoration: const BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Color(0xFF1C1C1E),
-                            ),
-                            child: Icon(
-                              Icons.add,
-                              color: Colors.white.withAlpha(150),
-                              size: 18,
-                            ),
-                          ),
-                        ],
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
 
-          // **Friend List**
-          if (selectedChip != "Status")
-            if (_friends.isEmpty && !isLoading)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: _buildEmptyState(),
-              )
-            else
-              SliverToBoxAdapter(
-                child: Transform.translate(
-                  offset: Offset(0, _scrollYOffset),
-                  child: Container(
-                    child: friendList(),
+            // **Friend List**
+            if (selectedChip != "Status")
+              if (_friends.isEmpty && !isLoading)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: _buildEmptyState(),
+                )
+              else
+                SliverToBoxAdapter(
+                  child: Transform.translate(
+                    offset: Offset(0, _scrollYOffset),
+                    child: Container(
+                      child: friendList(),
+                    ),
                   ),
                 ),
-              ),
+          ] else if (_selectedIndex == 2) ...[
+              SliverToBoxAdapter(
+                child: const PendingRequestsScreen(),
+              )
+          ] else ...[
+            SliverFillRemaining(
+              child: Center(
+                child: Text(
+                  'Screen for index $_selectedIndex',
+                  style: TextStyle(color: Colors.white)
+                )
+              )
+            )
+          ]
         ],
       ),
     );

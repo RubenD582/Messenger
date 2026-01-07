@@ -81,15 +81,13 @@ class _PendingRequestsScreenState extends State<PendingRequestsScreen> {
     return _isLoading
         ? Center(child: CupertinoActivityIndicator(color: Colors.white,))
         : _pendingRequests.isEmpty
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  mainAxisSize: MainAxisSize.max,
-                  children: [
-                    Text(
-                      ""
-                    ),
-                  ],
+            ? Padding(
+                padding: const EdgeInsets.symmetric(vertical: 64.0),
+                child: Center(
+                  child: Text(
+                    "No pending requests.",
+                    style: TextStyle(color: Colors.grey, fontSize: 16),
+                  ),
                 ),
               )
             : ListView.builder(
