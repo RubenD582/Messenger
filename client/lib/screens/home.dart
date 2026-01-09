@@ -57,7 +57,7 @@ class _HomeState extends State<Home> {
   // Message state
   Map<String, int> _unreadCounts = {}; // conversationId -> unread count
   Map<String, bool> _typingStatus = {}; // conversationId -> is typing
-  Map<String, String> _lastMessages = {}; // conversationId -> last message text
+  Map<String, Message?> _lastMessageInfo = {}; // conversationId -> last message object
   late StreamSubscription<Map<String, dynamic>> _newMessageSubscription;
   late StreamSubscription<Map<String, dynamic>> _typingIndicatorSubscription; // ADDED THIS LINE
   late StreamSubscription<Map<String, dynamic>> _readReceiptSubscription;
@@ -432,6 +432,36 @@ class _HomeState extends State<Home> {
       // This ensures it's available when opening the chat screen
       try {
         final message = Message.fromJson(data);
+
+        // Check if this is a "chat cleared" system message
+        final isChatCleared =
+            message.messageType == 'system' &&
+            message.metadata?['action'] == 'chat_cleared';
+
+        if (isChatCleared) {
+          // Clear all messages from local database for this conversation
+          final conversationId = message.conversationId;
+          await MessageDatabase.deleteConversation(
+            conversationId,
+            skipServerCall: true, // Skip server call to avoid infinite loop
+          );
+
+          // Update UI state to show the system message
+          if (mounted) {
+            setState(() {
+              _lastMessageInfo[conversationId] = message; // Show system message
+              _unreadCounts[conversationId] = 0;
+            });
+          }
+
+          if (kDebugMode) {
+            print('🗑️ Cleared conversation $conversationId from home screen (chat cleared by other user)');
+          }
+
+          // Don't save the system message to DB, but show it in UI
+          return;
+        }
+
         await MessageDatabase.insertMessage(message);
         if (kDebugMode) {
           print('✅ Saved message to local DB from home screen: ${message.messageId}');
@@ -445,12 +475,13 @@ class _HomeState extends State<Home> {
       // Update unread count and last message for the conversation
       final conversationId = data['conversationId'] as String?;
       final senderId = data['senderId'] as String?;
-      final message = data['message'] as String?;
+      final messageContent = data['message'] as String?; // Renamed to avoid conflict
 
-      if (conversationId != null && message != null) {
+      if (conversationId != null && messageContent != null) {
         setState(() {
-          // Store the last message text
-          _lastMessages[conversationId] = message;
+          // Store the last message object
+          final incomingMessage = Message.fromJson(data);
+          _lastMessageInfo[conversationId] = incomingMessage;
 
           // Only increment unread count if the message is from someone else
           if (senderId != null && senderId != uuid) {
@@ -608,16 +639,16 @@ class _HomeState extends State<Home> {
           items: <BottomNavigationBarItem>[
             BottomNavigationBarItem(
               icon: SizedBox(
-                width: 24,
-                height: 24,
+                width: 20,
+                height: 20,
                 child: Opacity(
                   opacity: 0.5,
                   child: SvgPicture.asset('assets/home.svg'),
                 ),
               ),
               activeIcon: SizedBox(
-                width: 24,
-                height: 24,
+                width: 20,
+                height: 20,
                 child: SvgPicture.asset('assets/home.svg'),
               ),
               label: '',
@@ -712,16 +743,16 @@ class _HomeState extends State<Home> {
             ),
             BottomNavigationBarItem(
               icon: SizedBox(
-                width: 24,
-                height: 24,
+                width: 20,
+                height: 20,
                 child: Opacity(
                   opacity: 0.5,
                   child: SvgPicture.asset('assets/profile.svg'),
                 ),
               ),
               activeIcon: SizedBox(
-                width: 24,
-                height: 24,
+                width: 20,
+                height: 20,
                 child: SvgPicture.asset('assets/profile.svg'),
               ),
               label: '',
@@ -827,7 +858,7 @@ class _HomeState extends State<Home> {
               ),
 
               SliverPadding(
-                padding: const EdgeInsets.symmetric(vertical: 15),
+                padding: const EdgeInsets.symmetric(vertical: 10),
                 sliver: SliverToBoxAdapter(
                 child: Transform.translate(
                   offset: Offset(0, _scrollYOffset * 0.75),
@@ -845,7 +876,11 @@ class _HomeState extends State<Home> {
                           children: [
                             chip("All"),
                             const SizedBox(width: 6),
+                            chip("Unread"),
+                            const SizedBox(width: 6),
                             chip("Pinned"),
+                            const SizedBox(width: 6),
+                            chip("Groups"),
                             const SizedBox(width: 6),
                             chip("Status"),
                             const SizedBox(width: 6),
@@ -888,9 +923,11 @@ class _HomeState extends State<Home> {
                   ),
                 ),
           ] else if (_selectedIndex == 2) ...[
-            NotificationsScreen(
-              apiService: apiService,
-              formatRelativeTime: formatRelativeTime,
+            SliverFillRemaining(
+              child: NotificationsScreen(
+                apiService: apiService,
+                formatRelativeTime: formatRelativeTime,
+              ),
             )
           ] else ...[
             SliverFillRemaining(
@@ -929,10 +966,54 @@ class _HomeState extends State<Home> {
           final bool isTyping = _typingStatus[conversationId] ?? false;
           final int unreadCount = _unreadCounts[conversationId] ?? 0;
 
-          // Mock data for features not yet implemented
+          // Construct descriptive text for the last message
+          final Message? lastMessageObject = _lastMessageInfo[conversationId];
+          String lastMessageDisplay = 'Say Hi!';
 
-          final String lastMessage =
-              _lastMessages[conversationId] ?? 'Say Hi!';
+          if (lastMessageObject != null) {
+            final isMeLastSender = lastMessageObject.senderId == uuid;
+            final String prefix = isMeLastSender ? 'You sent' : 'Sent';
+
+            switch (lastMessageObject.messageType) {
+              case 'system':
+                // System messages like "John Doe cleared the chat"
+                if (isMeLastSender) {
+                  lastMessageDisplay = 'You cleared the chat';
+                } else {
+                  lastMessageDisplay = lastMessageObject.message;
+                }
+                break;
+              case 'gif':
+                lastMessageDisplay = '$prefix a GIF';
+                break;
+              case 'sticker':
+                lastMessageDisplay = '$prefix a sticker';
+                break;
+              case 'clip':
+                lastMessageDisplay = '$prefix a clip';
+                break;
+              case 'drawing':
+                lastMessageDisplay = '$prefix a drawing';
+                break;
+              case 'text':
+                if (lastMessageObject.metadata != null && lastMessageObject.metadata!['effect'] == 'gift') {
+                  lastMessageDisplay = '$prefix a gift';
+                } else if (lastMessageObject.metadata != null && lastMessageObject.metadata!['effect'] == 'love') {
+                  lastMessageDisplay = '$prefix love';
+                } else {
+                  lastMessageDisplay = lastMessageObject.message;
+                }
+                break;
+              default:
+                lastMessageDisplay = lastMessageObject.message;
+            }
+
+            // Prepend "You: " if the last message was sent by the current user (but not for system messages)
+            if (isMeLastSender && lastMessageObject.messageType != 'system' && !lastMessageDisplay.startsWith('You:')) { // Added check to prevent double prefixing
+              lastMessageDisplay = 'You: $lastMessageDisplay';
+            }
+          }
+
           final String timestamp =
               index % 6 == 0
                   ? 'Just now'
@@ -959,7 +1040,7 @@ class _HomeState extends State<Home> {
                   }
                 },
                 background: Container(
-                  color: Color(0xFF5856D6),
+                  color: Colors.white,
                   alignment: Alignment.centerLeft,
                   padding: EdgeInsets.only(left: 20),
                   child: Icon(
@@ -984,17 +1065,26 @@ class _HomeState extends State<Home> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder:
-                            (context) => ChatScreen(
-                              conversationId: conversationId,
-                              friendId: user['friend_id'],
-                              friendName:
-                                  '${user['first_name']} ${user['last_name']}',
-                              apiService: apiService,
-                            ),
-                      ),
-                    );
-                  },
+                                                  builder:
+                                                      (context) => ChatScreen(
+                                                        conversationId: conversationId,
+                                                        friendId: user['friend_id'],
+                                                        friendName:
+                                                            '${user['first_name']} ${user['last_name']}',
+                                                        apiService: apiService,
+                                                      ),
+                                              ),
+                                            ).then((_) {
+                                              // This block executes when ChatScreen is popped
+                                              if (mounted) {
+                                                setState(() {
+                                                  _unreadCounts[conversationId] = 0; // Explicitly set unread count to 0
+                                                });
+                                                if (kDebugMode) {
+                                                  print('✅ Home screen updated unread count for $conversationId to 0 after returning from chat.');
+                                                }
+                                              }
+                                            });                  },
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
@@ -1026,7 +1116,7 @@ class _HomeState extends State<Home> {
                                     '${user['first_name']} ${user['last_name']}',
                                     style: TextStyle(
                                       color: Colors.white,
-                                      fontWeight: FontWeight.w500,
+                                      fontWeight: unreadCount > 0 ? FontWeight.w700 : FontWeight.w500, // Conditional bold
                                       fontSize: 15,
                                     ),
                                     maxLines: 1,
@@ -1039,7 +1129,6 @@ class _HomeState extends State<Home> {
                                 ],
                               ),
                               SizedBox(height: 4),
-                              // Message and timestamp below name
                               isTyping
                                   ? Text(
                                       'Typing...',
@@ -1056,7 +1145,7 @@ class _HomeState extends State<Home> {
                                           text: TextSpan(
                                             children: [
                                               TextSpan(
-                                                text: '$unreadCount New Message${unreadCount > 1 ? 's' : ''}',
+                                                text: '$unreadCount+ New Message${unreadCount > 1 ? 's' : ''}',
                                                 style: TextStyle(
                                                   color: Colors.white,
                                                   fontWeight: FontWeight.w600,
@@ -1088,10 +1177,10 @@ class _HomeState extends State<Home> {
                                           text: TextSpan(
                                             children: [
                                               TextSpan(
-                                                text: lastMessage,
+                                                text: lastMessageDisplay, // Use the new descriptive string
                                                 style: TextStyle(
                                                   color: Colors.white,
-                                                  fontWeight: FontWeight.w400,
+                                                  fontWeight: FontWeight.w400, // Keep normal weight for read messages
                                                   fontSize: 13,
                                                 ),
                                               ),
@@ -1117,6 +1206,19 @@ class _HomeState extends State<Home> {
                             ],
                           ),
                         ),
+                        // Small blue circle for new messages
+                        if (unreadCount > 0)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8.0),
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF007AFF), // iOS Blue
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
                   ),

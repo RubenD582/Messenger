@@ -16,7 +16,7 @@ class SegmentedStatusRing extends StatelessWidget {
     required this.size,
     this.strokeWidth = 3.0,
     required this.child,
-    this.gradientColors = const [Color(0xFF8B7FE8), Color(0xFF5856D6)],
+    this.gradientColors = const [Color(0xFF4192EF), Color(0xFF4192EF)], // Changed to the specified blue
   });
 
   @override
@@ -34,7 +34,7 @@ class SegmentedStatusRing extends StatelessWidget {
               segmentCount: segmentCount,
               viewedCount: viewedCount,
               strokeWidth: strokeWidth,
-              gradientColors: gradientColors,
+              gradientColors: gradientColors, 
             ),
           ),
           // Black background circle
@@ -58,7 +58,7 @@ class _SegmentedRingPainter extends CustomPainter {
   final int segmentCount;
   final int viewedCount;
   final double strokeWidth;
-  final List<Color> gradientColors;
+  final List<Color> gradientColors; // Still keep for potential custom gradients
 
   _SegmentedRingPainter({
     required this.segmentCount,
@@ -86,8 +86,8 @@ class _SegmentedRingPainter extends CustomPainter {
       final isViewed = i < viewedCount;
       final segmentColor = isViewed
           ? const Color(0xFF48484A) // Lighter grey for viewed segments
-          : gradientColors[1]; // Purple for unviewed
-
+          : const Color(0xFF4192EF); // Changed to the specified blue for unviewed
+      
       final paint = Paint()
         ..color = segmentColor
         ..style = PaintingStyle.stroke

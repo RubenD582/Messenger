@@ -432,22 +432,58 @@ class ApiService {
 
   Future<List<Map<String, dynamic>>> fetchNotifications() async {
     final String apiUrl = '$baseUrl/notifications';
-    final token = await AuthService.getToken();
+    String? token = await AuthService.getToken();
 
-    final response = await http.get(
-      Uri.parse(apiUrl),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-    );
+    try {
+      var response = await http.get(
+        Uri.parse(apiUrl),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      );
 
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      return List<Map<String, dynamic>>.from(data['notifications']);
-    } else {
-      // Return empty list on error to prevent UI from crashing
-      return [];
+      // If token expired (403 or 401), try to refresh and retry once
+      if (response.statusCode == 403 || response.statusCode == 401) {
+        if (kDebugMode) {
+          print('Token expired, attempting to refresh notifications token...');
+        }
+
+        final refreshResult = await AuthService.refreshAccessToken();
+        if (refreshResult['success'] == true) {
+          token = refreshResult['accessToken'];
+
+          // Retry the request with new token
+          response = await http.get(
+            Uri.parse(apiUrl),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+          );
+        } else {
+          if (kDebugMode) {
+            print('Token refresh failed for notifications: ${refreshResult['error']}');
+          }
+          return []; // Return empty if refresh fails
+        }
+      }
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return List<Map<String, dynamic>>.from(data['notifications']);
+      } else {
+        if (kDebugMode) {
+          print('Failed to load notifications with status code: ${response.statusCode}');
+          print('Response body: ${response.body}');
+        }
+        return []; // Return empty list on other errors
+      }
+    } catch (error) {
+      if (kDebugMode) {
+        print('Error fetching notifications: $error');
+      }
+      return []; // Return empty list on network or other errors
     }
   }
 

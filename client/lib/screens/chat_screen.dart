@@ -2850,7 +2850,6 @@ class _ChatScreenState extends State<ChatScreen> {
                                         );
                                       },
                                       title: 'Media',
-                                      icon: CupertinoIcons.photo,
                                     ),
                                     PullDownMenuItem(
                                       onTap: () {
@@ -2859,14 +2858,12 @@ class _ChatScreenState extends State<ChatScreen> {
                                         });
                                       },
                                       title: 'Paint',
-                                      icon: CupertinoIcons.paintbrush,
                                     ),
                                     PullDownMenuItem(
                                       onTap: () {
                                         _showEffectsBottomSheet();
                                       },
                                       title: 'Effects',
-                                      icon: CupertinoIcons.sparkles,
                                     ),
                                   ],
                                   buttonBuilder: (context, showMenu) => Container(

@@ -25,10 +25,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   late StreamSubscription _notificationStreamSubscription;
   String? _errorMessage;
   final Set<String> _notificationIds = {}; // Track notification IDs to prevent duplicates
+  String? selectedChip = "All"; // New state variable for selected chip
+  List<Map<String, dynamic>> _groupedNotifications = []; // New list for notifications with dividers
 
   @override
   void initState() {
     super.initState();
+    if (kDebugMode) {
+      print('🔔 NotificationsScreen: initState called');
+    }
     _fetchNotifications();
 
     // Subscribe to real-time notifications with error handling
@@ -58,6 +63,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             if (_notifications.length == 1) {
               _isLoading = false;
             }
+            _sortAndGroupNotifications(); // Sort and group after real-time update
           });
         }
       },
@@ -72,11 +78,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   @override
   void dispose() {
+    if (kDebugMode) {
+      print('🔔 NotificationsScreen: dispose called');
+    }
     _notificationStreamSubscription.cancel();
     super.dispose();
   }
 
   Future<void> _fetchNotifications() async {
+    if (kDebugMode) {
+      print('🔔 NotificationsScreen: _fetchNotifications called');
+    }
     try {
       final notifications = await widget.apiService.fetchNotifications();
       if (mounted) {
@@ -92,6 +104,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           }
           _isLoading = false;
           _errorMessage = null;
+          if (kDebugMode) {
+            print('🔔 NotificationsScreen: Fetched ${notifications.length} notifications.');
+          }
+          _sortAndGroupNotifications(); // Sort and group after fetching
         });
       }
     } catch (e) {
@@ -105,6 +121,79 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         });
       }
     }
+  }
+
+  void _sortAndGroupNotifications() {
+    // Sort notifications by timestamp (latest first)
+    if (_notifications.isNotEmpty) {
+      _notifications.sort((a, b) {
+        final DateTime dateA = DateTime.parse(a['timestamp']);
+        final DateTime dateB = DateTime.parse(b['timestamp']);
+        return dateB.compareTo(dateA); // Sort descending (latest first)
+      });
+    }
+
+    _groupedNotifications.clear();
+    if (_notifications.isEmpty) return;
+
+    final now = DateTime.now();
+    // Normalize 'now' to start of day for accurate day comparisons
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final sevenDaysAgo = today.subtract(const Duration(days: 7));
+    final thirtyDaysAgo = today.subtract(const Duration(days: 30));
+
+    String lastDividerCategory = '';
+
+    // Filter notifications first before grouping
+    final List<Map<String, dynamic>> filteredNotifications = _filterNotifications();
+
+    for (var notification in filteredNotifications) {
+      final DateTime notificationDate = DateTime.parse(notification['timestamp']);
+      // Normalize notificationDate to start of day for consistent comparisons
+      final DateTime normalizedNotificationDate = DateTime(notificationDate.year, notificationDate.month, notificationDate.day);
+      
+      String currentDividerCategory = '';
+      if (normalizedNotificationDate.isAtSameMomentAs(today)) {
+        currentDividerCategory = 'Today';
+      } else if (normalizedNotificationDate.isAtSameMomentAs(yesterday)) {
+        currentDividerCategory = 'Yesterday';
+      } else if (normalizedNotificationDate.isAfter(sevenDaysAgo)) {
+        currentDividerCategory = 'Last 7 days';
+      } else if (normalizedNotificationDate.isAfter(thirtyDaysAgo)) {
+        currentDividerCategory = 'Last 30 days';
+      } else {
+        currentDividerCategory = 'Older';
+      }
+
+      // Add divider if category changes or it's the first notification
+      if (currentDividerCategory != lastDividerCategory) {
+        _groupedNotifications.add({
+          'type': 'divider',
+          'title': currentDividerCategory,
+        });
+        lastDividerCategory = currentDividerCategory;
+      }
+
+      _groupedNotifications.add(notification);
+    }
+  }
+
+  Widget _buildTimeDivider(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          title,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14, // Appropriate size for a divider
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _acceptFriendRequest(String friendId, String notificationId) async {
@@ -189,97 +278,116 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
 
-  @override
-  Widget build(BuildContext context) {
-    if (_isLoading) {
-      return const SliverFillRemaining(
-        child: Center(child: CupertinoActivityIndicator(color: Colors.white)),
-      );
-    }
-
-    if (_errorMessage != null) {
-      return SliverFillRemaining(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                _errorMessage!,
-                style: const TextStyle(color: Colors.red, fontSize: 16),
+    @override
+    Widget build(BuildContext context) {
+      // This method now returns a List<Widget> (slivers)
+  
+      return CustomScrollView(
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    chip("All"),
+                    const SizedBox(width: 6),
+                    chip("Replies"),
+                    const SizedBox(width: 6),
+                    chip("Requests"),
+                    const SizedBox(width: 6),
+                    chip("Verified"),
+                  ],
+                ),
               ),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () {
-                  setState(() {
-                    _isLoading = true;
-                    _errorMessage = null;
-                  });
-                  _fetchNotifications();
+            ),
+          ),
+          if (_isLoading)
+            const SliverFillRemaining(
+              child: Center(child: CupertinoActivityIndicator(color: Colors.white)),
+            )
+          else if (_errorMessage != null)
+            SliverFillRemaining(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _errorMessage!,
+                      style: const TextStyle(color: Colors.red, fontSize: 16),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () {
+                        setState(() {
+                          _isLoading = true;
+                          _errorMessage = null;
+                        });
+                        _fetchNotifications();
+                      },
+                      child: const Text("Retry"),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (_groupedNotifications.isEmpty) // Check grouped list emptiness
+            SliverFillRemaining(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      child: const Icon(
+                        CupertinoIcons.bell,
+                        size: 48,
+                        color: Color(0xFF262626),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    const Text(
+                      "No notifications yet",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      "When someone sends you a friend request,\nyou'll see it here.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Color(0xFF8E8E93),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            SliverList(
+              delegate: SliverChildBuilderDelegate(
+                (context, index) {
+                  final item = _groupedNotifications[index];
+                  if (item['type'] == 'divider') {
+                    return _buildTimeDivider(item['title']);
+                  } else {
+                                      return Padding(
+                                        padding: const EdgeInsets.only(bottom: 1.0), // Reduced spacing
+                                        child: _buildNotificationTile(item),
+                                      );                  }
                 },
-                child: const Text("Retry"),
+                childCount: _groupedNotifications.length,
               ),
-            ],
-          ),
-        ),
+            ),
+        ],
       );
     }
-
-    if (_notifications.isEmpty) {
-      return SliverFillRemaining(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: const Color(0xFF262626),
-                    width: 2,
-                  ),
-                ),
-                child: const Icon(
-                  CupertinoIcons.bell,
-                  size: 48,
-                  color: Color(0xFF262626),
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                "No notifications yet",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                "When someone sends you a friend request,\nyou'll see it here.",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Color(0xFF8E8E93),
-                  fontSize: 14,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    return SliverList(
-      delegate: SliverChildBuilderDelegate(
-        (context, index) {
-          final notification = _notifications[index];
-          return _buildNotificationTile(notification);
-        },
-        childCount: _notifications.length,
-      ),
-    );
-  }
-
   Widget _buildNotificationTile(Map<String, dynamic> notification) {
     final type = notification['type'];
     final actor = notification['actor'];
@@ -309,7 +417,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center, // Vertically center profile picture
         children: [
           // Profile picture
           CircleAvatar(
@@ -360,7 +468,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 6), // Reduced spacing
                 _buildRequestActions(status, actorId, notificationId),
               ],
             ),
@@ -373,15 +481,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget _buildRequestActions(String status, String actorId, String notificationId) {
     if (status == 'accepted') {
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 7), // Match Confirm/Delete padding
         decoration: BoxDecoration(
           color: const Color(0xFF262626),
           borderRadius: BorderRadius.circular(20),
         ),
         child: const Text(
-          'Accepted',
+          'Added',
           style: TextStyle(
-            color: Color(0xFF8E8E93),
+            color: const Color(0xFF8E8E93), // Change text color to light grey
             fontSize: 12,
             fontWeight: FontWeight.w600,
           ),
@@ -444,7 +552,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 10.0),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center, // Vertically center profile picture
         children: [
           // Profile picture
           CircleAvatar(
@@ -519,5 +627,67 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       );
     }
     return const SizedBox.shrink();
+  }
+
+  // New chip widget for filtering notifications
+  Widget chip(String name) {
+    bool isSelected = selectedChip == name;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 0),
+      child: IntrinsicWidth(
+        child: GestureDetector(
+          onTap: () {
+            setState(() {
+              selectedChip = name;
+            });
+          },
+          child: Container(
+            height: 32,
+            decoration: BoxDecoration(
+              color: isSelected ? Colors.white : const Color(0xFF1C1C1E),
+              borderRadius: const BorderRadius.all(Radius.circular(100)),
+            ),
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.only(left: 15, right: 15),
+                child: Text(
+                  name,
+                  style: TextStyle(
+                    color: isSelected
+                        ? Colors.black
+                        : Colors.white.withAlpha(150),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // New method to filter notifications based on the selected chip
+  List<Map<String, dynamic>> _filterNotifications() {
+    if (selectedChip == "All") {
+      return _notifications;
+    } else if (selectedChip == "Replies") {
+      // Assuming 'reply' type or similar in your notification data
+      return _notifications.where((n) => n['type'] == 'REPLY').toList();
+    } else if (selectedChip == "Follows") {
+      return _notifications.where((n) => 
+        n['type'] == 'FRIEND_REQUEST_RECEIVED' || 
+        n['type'] == 'FRIEND_REQUEST_ACCEPTED'
+      ).toList();
+    } else if (selectedChip == "Verified") {
+      return _notifications.where((n) => 
+        (n['actor'] != null && n['actor']['verified'] == true) ||
+        (n['targetUser'] != null && n['targetUser']['verified'] == true)
+      ).toList();
+    }
+    return _notifications; // Fallback to all
   }
 }
