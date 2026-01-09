@@ -1,11 +1,12 @@
-# Ignore enviroments
+# Environment variables
 .env
-.env.local
+.env.*
 
-# Ignore private and public keys
-config/keys/private_key.pem
-config/keys/public_key.pem
+# Node dependencies
+node_modules/
 
-.DS_Store
 # Security keys
 config/keys/*.pem
+
+# OS files
+.DS_Store

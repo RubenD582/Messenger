@@ -1425,3 +1425,62 @@
 {"level":"info","message":"User logged in: rdreyer523@gmail.com from IP: ::ffff:192.168.0.154","timestamp":"2026-01-09T07:14:19.721Z"}
 {"level":"error","message":"Failed to update RedisGraph for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Unknown function 'datetime'","timestamp":"2026-01-09T07:14:23.169Z"}
 {"level":"info","message":"Location updated for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Vanderbijlpark, South Africa","timestamp":"2026-01-09T07:14:23.169Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2026-01-09T08:01:24.312Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2026-01-09T08:01:50.426Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2026-01-09T08:02:35.295Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2026-01-09T08:02:49.614Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2026-01-09T08:03:51.727Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2026-01-09T08:04:06.060Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2026-01-09T08:04:16.540Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2026-01-09T08:04:35.676Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2026-01-09T08:04:49.106Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2026-01-09T08:04:59.359Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2026-01-09T08:09:21.465Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2026-01-09T08:10:41.134Z"}
+{"level":"error","message":"Failed to ensure user node in graph for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Unknown function 'datetime'","timestamp":"2026-01-09T08:11:48.396Z"}
+{"level":"info","message":"User logged in: rdreyer523@gmail.com from IP: ::ffff:192.168.0.154","timestamp":"2026-01-09T08:11:48.406Z"}
+{"level":"error","message":"Failed to update RedisGraph for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Unknown function 'datetime'","timestamp":"2026-01-09T08:11:50.710Z"}
+{"level":"info","message":"Location updated for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Vanderbijlpark, South Africa","timestamp":"2026-01-09T08:11:50.710Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2026-01-09T08:12:14.639Z"}
+{"level":"error","message":"Failed to ensure user node in graph for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Unknown function 'datetime'","timestamp":"2026-01-09T08:13:49.650Z"}
+{"level":"info","message":"User logged in: rdreyer523@gmail.com from IP: ::ffff:192.168.0.154","timestamp":"2026-01-09T08:13:49.660Z"}
+{"level":"error","message":"Failed to update RedisGraph for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Unknown function 'datetime'","timestamp":"2026-01-09T08:13:54.007Z"}
+{"level":"info","message":"Location updated for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Vanderbijlpark, South Africa","timestamp":"2026-01-09T08:13:54.007Z"}
+{"level":"error","message":"Failed to ensure user node in graph for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Unknown function 'datetime'","timestamp":"2026-01-09T08:21:08.289Z"}
+{"level":"info","message":"User logged in: rdreyer523@gmail.com from IP: ::ffff:192.168.0.154","timestamp":"2026-01-09T08:21:08.302Z"}
+{"level":"error","message":"Failed to update RedisGraph for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Unknown function 'datetime'","timestamp":"2026-01-09T08:21:10.326Z"}
+{"level":"info","message":"Location updated for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Vanderbijlpark, South Africa","timestamp":"2026-01-09T08:21:10.327Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2026-01-09T08:21:38.993Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2026-01-09T08:22:49.065Z"}
+{"level":"error","message":"Failed to ensure user node in graph for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Unknown function 'datetime'","timestamp":"2026-01-09T08:23:06.894Z"}
+{"level":"info","message":"User logged in: rdreyer523@gmail.com from IP: ::ffff:192.168.0.154","timestamp":"2026-01-09T08:23:06.918Z"}
+{"level":"error","message":"Failed to update RedisGraph for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Unknown function 'datetime'","timestamp":"2026-01-09T08:23:08.658Z"}
+{"level":"info","message":"Location updated for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Vanderbijlpark, South Africa","timestamp":"2026-01-09T08:23:08.659Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2026-01-09T08:25:39.562Z"}
+{"level":"error","message":"Failed to ensure user node in graph for user 982d5920-277d-45bc-a402-170168e6ea29: Unknown function 'datetime'","timestamp":"2026-01-09T08:33:07.069Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com from IP: ::ffff:192.168.0.156","timestamp":"2026-01-09T08:33:07.135Z"}
+{"level":"error","message":"Failed to update RedisGraph for user 982d5920-277d-45bc-a402-170168e6ea29: Unknown function 'datetime'","timestamp":"2026-01-09T08:33:09.162Z"}
+{"level":"info","message":"Location updated for user 982d5920-277d-45bc-a402-170168e6ea29: Vanderbijlpark, South Africa","timestamp":"2026-01-09T08:33:09.163Z"}
+{"level":"error","message":"Failed to ensure user node in graph for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Unknown function 'datetime'","timestamp":"2026-01-09T08:38:09.923Z"}
+{"level":"info","message":"User logged in: rdreyer523@gmail.com from IP: ::ffff:192.168.0.154","timestamp":"2026-01-09T08:38:09.939Z"}
+{"level":"error","message":"Failed to update RedisGraph for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Unknown function 'datetime'","timestamp":"2026-01-09T08:38:43.370Z"}
+{"level":"info","message":"Location updated for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Vanderbijlpark, South Africa","timestamp":"2026-01-09T08:38:43.371Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2026-01-09T08:43:45.012Z"}
+{"level":"info","message":"Email transporter initialized","timestamp":"2026-01-09T08:48:21.007Z"}
+{"level":"error","message":"Failed to ensure user node in graph for user 982d5920-277d-45bc-a402-170168e6ea29: Unknown function 'datetime'","timestamp":"2026-01-09T08:48:34.690Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com from IP: ::ffff:192.168.0.156","timestamp":"2026-01-09T08:48:34.709Z"}
+{"level":"error","message":"Failed to update RedisGraph for user 982d5920-277d-45bc-a402-170168e6ea29: Unknown function 'datetime'","timestamp":"2026-01-09T08:48:36.116Z"}
+{"level":"info","message":"Location updated for user 982d5920-277d-45bc-a402-170168e6ea29: Vanderbijlpark, South Africa","timestamp":"2026-01-09T08:48:36.117Z"}
+{"level":"error","message":"Failed to ensure user node in graph for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Unknown function 'datetime'","timestamp":"2026-01-09T08:48:49.686Z"}
+{"level":"info","message":"User logged in: rdreyer523@gmail.com from IP: ::ffff:192.168.0.154","timestamp":"2026-01-09T08:48:49.695Z"}
+{"level":"error","message":"Failed to update RedisGraph for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Unknown function 'datetime'","timestamp":"2026-01-09T08:48:51.999Z"}
+{"level":"info","message":"Location updated for user 1602e158-a8df-401e-94b4-9fa9d0cc7555: Vanderbijlpark, South Africa","timestamp":"2026-01-09T08:48:51.999Z"}
+{"level":"error","message":"Failed to ensure user node in graph for user 982d5920-277d-45bc-a402-170168e6ea29: Unknown function 'datetime'","timestamp":"2026-01-09T09:00:24.970Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com from IP: ::ffff:192.168.0.156","timestamp":"2026-01-09T09:00:25.001Z"}
+{"level":"error","message":"Failed to update RedisGraph for user 982d5920-277d-45bc-a402-170168e6ea29: Unknown function 'datetime'","timestamp":"2026-01-09T09:00:27.215Z"}
+{"level":"info","message":"Location updated for user 982d5920-277d-45bc-a402-170168e6ea29: Vanderbijlpark, South Africa","timestamp":"2026-01-09T09:00:27.216Z"}
+{"level":"error","message":"Failed to ensure user node in graph for user 982d5920-277d-45bc-a402-170168e6ea29: Unknown function 'datetime'","timestamp":"2026-01-09T09:01:06.767Z"}
+{"level":"info","message":"User logged in: rubendreyer14@gmail.com from IP: ::ffff:192.168.0.156","timestamp":"2026-01-09T09:01:06.783Z"}
+{"level":"error","message":"Failed to update RedisGraph for user 982d5920-277d-45bc-a402-170168e6ea29: Unknown function 'datetime'","timestamp":"2026-01-09T09:01:07.817Z"}
+{"level":"info","message":"Location updated for user 982d5920-277d-45bc-a402-170168e6ea29: Vanderbijlpark, South Africa","timestamp":"2026-01-09T09:01:07.817Z"}
+{"level":"info","message":"Token refreshed for user: rdreyer523@gmail.com","timestamp":"2026-01-09T09:21:47.813Z"}

@@ -5,6 +5,7 @@ import 'package:client/screens/notifications.dart';
 import 'package:client/screens/chat_screen.dart';
 import 'package:client/screens/status_creation_screen.dart';
 import 'package:client/screens/status_viewer_screen.dart';
+import 'package:client/screens/remix_screen.dart';
 import 'package:client/models/status.dart';
 import 'package:client/models/message.dart';
 import 'package:client/database/message_database.dart';
@@ -71,6 +72,17 @@ class _HomeState extends State<Home> {
   final List<String> _pageTitles = ["Home", "Search", "Notifications", "Profile"];
 
   void _onItemTapped(int index) {
+    // Handle remix screen navigation (index 1)
+    if (index == 1) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const RemixScreen(),
+        ),
+      );
+      return;
+    }
+
     if (_selectedIndex != index) {
       _scrollController.jumpTo(0);
     }
@@ -659,13 +671,13 @@ class _HomeState extends State<Home> {
                 height: 24,
                 child: Opacity(
                   opacity: 0.5,
-                  child: Icon(CupertinoIcons.search, color: Colors.white),
+                  child: Icon(CupertinoIcons.camera_fill, color: Colors.white),
                 ),
               ),
               activeIcon: SizedBox(
                 width: 24,
                 height: 24,
-                child: Icon(CupertinoIcons.search, color: Colors.white),
+                child: Icon(CupertinoIcons.camera_fill, color: Colors.white),
               ),
               label: '',
             ),

@@ -19,8 +19,10 @@ const suggestionsRoutes = require('./routes/suggestions'); // Import suggestions
 const notificationRoutes = require('./routes/notifications'); // Import notification routes
 const debugRoutes = require('./routes/debug'); // Import debug routes
 const dashboardRoutes = require('./routes/dashboard'); // Import dashboard routes
+const remixRoutes = require('./routes/remixes'); // Import remix routes
 const { runNotificationService } = require('./services/notificationService'); // Import notification service
 const { runChatMessageService } = require('./services/chatMessageService'); // Import chat message service
+const { initRemixService, runRemixService } = require('./services/remixService'); // Import remix service
 const db = require("./db");
 const cookieParser = require("cookie-parser");
 const { connectKafka, consumer, producer } = require('./kafkaClient'); // Add producer here
@@ -80,6 +82,7 @@ app.use("/suggestions", suggestionsRoutes); // Use suggestions route
 app.use("/notifications", notificationRoutes); // Use notification routes
 app.use("/debug", debugRoutes); // Use debug routes (production: disable or protect with admin auth)
 app.use("/dashboard", dashboardRoutes); // Use dashboard routes
+app.use("/remixes", remixRoutes); // Use remix routes
 
 // Dashboard page route (MUST be before static files)
 app.get('/admin/dashboard', (req, res) => {
@@ -88,6 +91,9 @@ app.get('/admin/dashboard', (req, res) => {
 
 // Serve dashboard static files
 app.use('/admin', express.static(path.join(__dirname, 'public')));
+
+// Serve uploaded images for remixes
+app.use('/uploads/remixes', express.static(path.join(__dirname, 'uploads/remixes')));
 
 // Serve static files from the Flutter web build directory
 app.use(express.static(path.join(__dirname, '../client/build/web')));
@@ -109,6 +115,15 @@ chatSocket(io);
 friendSocket(io);
 statusSocket(io);
 
+// Initialize remix WebSocket handler
+const remixService = initRemixService(io);
+io.on('connection', (socket) => {
+  const userId = socket.handshake.query.userId;
+  if (userId) {
+    remixService.registerSocket(socket, userId);
+  }
+});
+
 const graphService = require('./services/graphService'); // Import graphService
 
 // Kafka and Graph Database Connection and Subscription
@@ -122,7 +137,7 @@ const graphService = require('./services/graphService'); // Import graphService
     console.log('Kafka consumer subscribed to friend-events');
 
     // Subscribe notification consumer BEFORE connecting
-    const { notificationConsumer, messageConsumer, typingConsumer, receiptConsumer } = require('./kafkaClient');
+    const { notificationConsumer, messageConsumer, typingConsumer, receiptConsumer, remixConsumer } = require('./kafkaClient');
     await notificationConsumer.subscribe({
       topic: 'notification-creation-jobs',
       fromBeginning: false
@@ -148,6 +163,13 @@ const graphService = require('./services/graphService'); // Import graphService
     });
     console.log('Receipt consumer subscribed to read-receipts');
 
+    // Subscribe remix consumer BEFORE connecting
+    await remixConsumer.subscribe({
+      topic: 'remix-updates',
+      fromBeginning: false
+    });
+    console.log('Remix consumer subscribed to remix-updates');
+
     // Now, connect all Kafka clients
     await connectKafka();
     console.log('All Kafka clients connected');
@@ -163,6 +185,10 @@ const graphService = require('./services/graphService'); // Import graphService
     // Start chat message service consumers (already subscribed)
     await runChatMessageService(io);
     console.log('Chat message service started.');
+
+    // Start remix service for real-time updates
+    await runRemixService(io);
+    console.log('Remix service started.');
 
   } catch (error) {
     console.error('Failed to connect to services:', error);

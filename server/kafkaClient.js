@@ -26,7 +26,8 @@ const statusConsumer = kafka.consumer({ groupId: 'status-events-group' });
 // Create consumer for notification service
 const notificationConsumer = kafka.consumer({ groupId: 'notification-service-group' });
 
-
+// Create consumer for remix service
+const remixConsumer = kafka.consumer({ groupId: 'remix-updates-group' });
 
 module.exports = {
     kafka,
@@ -37,6 +38,7 @@ module.exports = {
     receiptConsumer,
     statusConsumer,
     notificationConsumer,
+    remixConsumer,
     connectKafka: async () => {
         try {
             await producer.connect();
@@ -46,6 +48,7 @@ module.exports = {
             await receiptConsumer.connect();
             await statusConsumer.connect();
             await notificationConsumer.connect();
+            await remixConsumer.connect();
             console.log('Connected to Kafka (all producers and consumers)');
         } catch (error) {
             console.error('Failed to connect to Kafka:', error);

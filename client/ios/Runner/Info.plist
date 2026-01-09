@@ -49,6 +49,14 @@
 	<string>We use your location to suggest friends nearby and show you people from your country.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>We use your location to suggest friends nearby and show you people from your country.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>We need access to your camera to take photos for Daily Remix.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>We need access to your photo library to select photos for Daily Remix.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>We need access to save photos to your library.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>We need access to your microphone for video messages.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

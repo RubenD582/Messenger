@@ -134,7 +134,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
 
   Future<void> _fetchSuggestions() async {
-    if (_currentUserId == null) return;
+    if (_currentUserId == null || !mounted) return;
 
     setState(() {
       _isLoadingSuggestions = true;
