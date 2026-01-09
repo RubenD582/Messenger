@@ -206,23 +206,24 @@ class _RemixScreenState extends State<RemixScreen> {
                       ),
                     ),
                   ),
+
                   // Indicator badge
                   if (isMyTurn)
                     Positioned(
-                      top: 8,
-                      right: 8,
+                      bottom: 8,
+                      left: 8,
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.green,
+                          color: Colors.white,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Text(
-                          'Your turn',
+                          'Your Turn',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: Colors.black,
                             fontSize: 10,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),

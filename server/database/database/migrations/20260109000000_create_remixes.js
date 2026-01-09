@@ -8,10 +8,13 @@
  */
 
 exports.up = async function(knex) {
+  // Ensure uuid-ossp extension is enabled
+  await knex.raw('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
+
   // Create remix_groups table
   await knex.schema.createTable('remix_groups', (table) => {
     table.uuid('id').primary().defaultTo(knex.raw('uuid_generate_v4()'));
-    table.string('name', 100); // Optional group name
+    table.string('group_name', 100); // Optional group name
     table.uuid('created_by').notNullable();
     table.timestamp('created_at').defaultTo(knex.fn.now());
     table.timestamp('updated_at').defaultTo(knex.fn.now());
@@ -54,6 +57,7 @@ exports.up = async function(knex) {
     table.integer('image_height');
     table.string('theme', 100); // Optional: "chaos", "morning", "vibe check", etc.
     table.timestamp('created_at').defaultTo(knex.fn.now());
+    table.timestamp('updated_at').defaultTo(knex.fn.now());
     table.timestamp('expires_at'); // When remix window closes (e.g., 12 hours later)
     table.boolean('is_complete').defaultTo(false); // Marked complete when window closes
 

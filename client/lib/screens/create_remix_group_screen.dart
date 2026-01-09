@@ -1,4 +1,4 @@
-// create_remix_group_screen.dart - Bottom modal for creating remix groups
+// create_remix_group_screen.dart - BeReal-style remix group creation
 import 'dart:convert';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -67,7 +67,9 @@ class _CreateRemixGroupScreenState extends State<CreateRemixGroupScreen> {
       if (kDebugMode) {
         print('Error loading friends: $e');
       }
-      setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -79,11 +81,14 @@ class _CreateRemixGroupScreenState extends State<CreateRemixGroupScreen> {
         if (_selectedFriendIds.length < 4) {
           _selectedFriendIds.add(friendId);
         } else {
-          // Show error - max 5 members including yourself
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Maximum 5 members per group (including you)'),
-              backgroundColor: Colors.orange,
+            SnackBar(
+              content: const Text('Max 5 members per group'),
+              backgroundColor: Colors.white,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              margin: const EdgeInsets.all(16),
+              duration: const Duration(seconds: 2),
             ),
           );
         }
@@ -92,11 +97,14 @@ class _CreateRemixGroupScreenState extends State<CreateRemixGroupScreen> {
   }
 
   Future<void> _createGroup() async {
-    if (_selectedFriendIds.length < 2) {
+    if (_selectedFriendIds.length < 1) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Select at least 2 friends'),
-          backgroundColor: Colors.orange,
+        SnackBar(
+          content: const Text('Select at least 1 friend'),
+          backgroundColor: Colors.white,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
         ),
       );
       return;
@@ -115,19 +123,19 @@ class _CreateRemixGroupScreenState extends State<CreateRemixGroupScreen> {
       );
 
       if (mounted) {
-        Navigator.pop(context, true); // Return true to indicate success
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🎉 Group created! Start remixing'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) {
         setState(() => _isCreating = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to create group: $e')),
+          SnackBar(
+            content: Text('Failed to create group: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.all(16),
+          ),
         );
       }
     }
@@ -135,65 +143,72 @@ class _CreateRemixGroupScreenState extends State<CreateRemixGroupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final canCreate = _selectedFriendIds.length >= 1 && !_isCreating;
+
     return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
+      height: MediaQuery.of(context).size.height * 0.9,
       decoration: const BoxDecoration(
         color: Colors.black,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: Column(
         children: [
-          // Handle bar
-          Container(
-            margin: const EdgeInsets.only(top: 12),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: Colors.grey[700],
-              borderRadius: BorderRadius.circular(2),
+          // Drag handle
+          Center(
+            child: Container(
+              margin: const EdgeInsets.only(top: 8, bottom: 8),
+              width: 36,
+              height: 5,
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(3),
+              ),
             ),
           ),
 
           // Header
           Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Create Remix Group',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Select 2-4 friends to start remixing',
-                  style: TextStyle(
-                    color: Colors.grey[400],
-                    fontSize: 14,
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Group name input
-                TextField(
-                  controller: _groupNameController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: 'Group name (optional)',
-                    hintStyle: TextStyle(color: Colors.grey[600]),
-                    filled: true,
-                    fillColor: Colors.grey[900],
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Create Group',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 26,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: -0.3,
+                      ),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 14,
+                    const SizedBox(height: 4),
+                    Text(
+                      'Pick 1-4 friends',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.6),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w400,
+                      ),
+                    ),
+                  ],
+                ),
+                // Close button
+                GestureDetector(
+                  onTap: () => Navigator.pop(context),
+                  child: Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      CupertinoIcons.xmark,
+                      color: Colors.white,
+                      size: 16,
                     ),
                   ),
                 ),
@@ -201,31 +216,61 @@ class _CreateRemixGroupScreenState extends State<CreateRemixGroupScreen> {
             ),
           ),
 
-          // Selected count
+          // Group name input
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: TextField(
+                controller: _groupNameController,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w400,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'Group name',
+                  hintStyle: TextStyle(
+                    color: Colors.white.withOpacity(0.4),
+                    fontWeight: FontWeight.w400,
+                  ),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Selected count badge
           if (_selectedFriendIds.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(100),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
+                    const Icon(
                       CupertinoIcons.checkmark_circle_fill,
-                      color: Colors.blue,
+                      color: Colors.black,
                       size: 16,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     Text(
-                      '${_selectedFriendIds.length + 1}/5 members selected',
+                      '${_selectedFriendIds.length + 1}/5 members',
                       style: const TextStyle(
-                        color: Colors.blue,
-                        fontSize: 12,
+                        color: Colors.black,
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -234,43 +279,49 @@ class _CreateRemixGroupScreenState extends State<CreateRemixGroupScreen> {
               ),
             ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
 
-          // Friends grid
+          // Friends list
           Expanded(
             child: _isLoading
                 ? const Center(
-                    child: CircularProgressIndicator(color: Colors.white),
+                    child: CupertinoActivityIndicator(
+                      color: Colors.white,
+                      radius: 16,
+                    ),
                   )
                 : _friends.isEmpty
                     ? Center(
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
-                              CupertinoIcons.person_2,
-                              size: 64,
-                              color: Colors.grey[700],
+                            Container(
+                              width: 80,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                CupertinoIcons.person_2,
+                                size: 40,
+                                color: Colors.white.withOpacity(0.4),
+                              ),
                             ),
                             const SizedBox(height: 16),
                             Text(
                               'No friends yet',
                               style: TextStyle(
-                                color: Colors.grey[400],
+                                color: Colors.white.withOpacity(0.6),
                                 fontSize: 16,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],
                         ),
                       )
-                    : GridView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          crossAxisSpacing: 12,
-                          mainAxisSpacing: 16,
-                          childAspectRatio: 0.75,
-                        ),
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
                         itemCount: _friends.length,
                         itemBuilder: (context, index) {
                           final friend = _friends[index];
@@ -279,83 +330,99 @@ class _CreateRemixGroupScreenState extends State<CreateRemixGroupScreen> {
                           final firstName = friend['first_name'] ?? '';
                           final lastName = friend['last_name'] ?? '';
                           final username = friend['username'] ?? '';
+                          final fullName = '$firstName $lastName'.trim();
 
                           return GestureDetector(
                             onTap: () => _toggleFriend(friendId),
-                            child: Column(
-                              children: [
-                                // Profile picture with selection indicator
-                                Stack(
-                                  children: [
-                                    Container(
-                                      width: 80,
-                                      height: 80,
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
+                            child: Container(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? Colors.white
+                                    : Colors.white.withOpacity(0.05),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? Colors.white
+                                      : Colors.transparent,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  // Avatar
+                                  Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? Colors.black
+                                          : Colors.white.withOpacity(0.1),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        firstName.isNotEmpty
+                                            ? firstName[0].toUpperCase()
+                                            : '?',
+                                        style: TextStyle(
                                           color: isSelected
-                                              ? Colors.blue
-                                              : Colors.transparent,
-                                          width: 3,
-                                        ),
-                                      ),
-                                      child: CircleAvatar(
-                                        radius: 38,
-                                        backgroundColor: Colors.grey[800],
-                                        child: Text(
-                                          firstName.isNotEmpty
-                                              ? firstName[0].toUpperCase()
-                                              : '?',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 32,
-                                            fontWeight: FontWeight.bold,
-                                          ),
+                                              ? Colors.white
+                                              : Colors.white.withOpacity(0.8),
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.w500,
                                         ),
                                       ),
                                     ),
-                                    // Checkmark indicator
-                                    if (isSelected)
-                                      Positioned(
-                                        bottom: 0,
-                                        right: 0,
-                                        child: Container(
-                                          width: 28,
-                                          height: 28,
-                                          decoration: BoxDecoration(
-                                            color: Colors.blue,
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: Colors.black,
-                                              width: 2,
-                                            ),
-                                          ),
-                                          child: const Icon(
-                                            CupertinoIcons.check_mark,
-                                            color: Colors.white,
-                                            size: 16,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  // Name
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          fullName.isNotEmpty ? fullName : username,
+                                          style: TextStyle(
+                                            color: isSelected
+                                                ? Colors.black
+                                                : Colors.white,
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                // Name/username
-                                Text(
-                                  firstName.isNotEmpty
-                                      ? '$firstName ${lastName}'.trim()
-                                      : username,
-                                  style: TextStyle(
-                                    color: isSelected ? Colors.blue : Colors.white,
-                                    fontSize: 12,
-                                    fontWeight:
-                                        isSelected ? FontWeight.w600 : FontWeight.normal,
+                                        if (fullName.isNotEmpty)
+                                          Text(
+                                            '@$username',
+                                            style: TextStyle(
+                                              color: isSelected
+                                                  ? Colors.black.withOpacity(0.5)
+                                                  : Colors.white.withOpacity(0.5),
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w400,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
                                   ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                ),
-                              ],
+                                  // Checkmark
+                                  if (isSelected)
+                                    Container(
+                                      width: 24,
+                                      height: 24,
+                                      decoration: const BoxDecoration(
+                                        color: Colors.black,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        CupertinoIcons.checkmark,
+                                        color: Colors.white,
+                                        size: 14,
+                                      ),
+                                    ),
+                                ],
+                              ),
                             ),
                           );
                         },
@@ -365,38 +432,42 @@ class _CreateRemixGroupScreenState extends State<CreateRemixGroupScreen> {
           // Create button
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _isCreating || _selectedFriendIds.length < 2
-                      ? null
-                      : _createGroup,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    disabledBackgroundColor: Colors.grey[800],
+              padding: const EdgeInsets.all(20),
+              child: GestureDetector(
+                onTap: canCreate ? _createGroup : null,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: canCreate
+                        ? Colors.white
+                        : Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: _isCreating
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
+                      ? const Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.black,
+                              strokeWidth: 2,
+                            ),
                           ),
                         )
                       : Text(
-                          _selectedFriendIds.isEmpty
-                              ? 'Select friends to create'
-                              : 'Create Group (${_selectedFriendIds.length + 1} members)',
-                          style: const TextStyle(
-                            fontSize: 16,
+                          canCreate
+                              ? 'Create Group'
+                              : 'Select at least 1 friend',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: canCreate
+                                ? Colors.black
+                                : Colors.white.withOpacity(0.4),
+                            fontSize: 15,
                             fontWeight: FontWeight.w600,
+                            letterSpacing: -0.2,
                           ),
                         ),
                 ),

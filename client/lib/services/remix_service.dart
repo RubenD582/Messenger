@@ -178,8 +178,8 @@ class RemixService {
   // LAYERS
   // ============================================
 
-  /// Add a photo layer to a post
-  Future<RemixLayer> addPhotoLayer({
+  /// Add a photo layer to a post (merges and returns updated post)
+  Future<RemixPost> addPhotoLayer({
     required String postId,
     required File imageFile,
     double positionX = 0.5,
@@ -220,7 +220,7 @@ class RemixService {
 
     if (response.statusCode == 201) {
       final data = json.decode(responseBody);
-      return RemixLayer.fromJson(data['layer']);
+      return RemixPost.fromJson(data['post']);
     } else {
       throw Exception('Failed to add layer: ${response.statusCode}');
     }

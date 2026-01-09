@@ -13,7 +13,7 @@ class ImageStorage {
     // Compression settings
     this.settings = {
       base: {
-        quality: 85,
+        quality: 95, // Increased from 85 to reduce quality loss during merging
         format: 'jpeg',
         maxWidth: 1920,
         maxHeight: 1920,

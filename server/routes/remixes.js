@@ -7,6 +7,9 @@ const { authenticateToken } = require("../middleware/authMiddleware");
 const multer = require('multer');
 const imageStorage = require('../services/imageStorage');
 const { producer } = require('../kafkaClient');
+const sharp = require('sharp');
+const fs = require('fs').promises;
+const path = require('path');
 
 // Configure multer for memory storage (we'll process with sharp)
 const upload = multer({
@@ -39,15 +42,15 @@ router.post("/groups", authenticateToken, async (req, res) => {
     return res.status(400).json({ message: "Member IDs required" });
   }
 
-  // Limit group size (3-5 members including creator)
-  if (memberIds.length > 4 || memberIds.length < 2) {
-    return res.status(400).json({ message: "Groups must have 3-5 members" });
+  // Limit group size (2-5 members including creator)
+  if (memberIds.length > 4 || memberIds.length < 1) {
+    return res.status(400).json({ message: "Groups must have 2-5 members" });
   }
 
   try {
     // Create group
     const groupResult = await db.query(`
-      INSERT INTO remix_groups (name, created_by)
+      INSERT INTO remix_groups (group_name, created_by)
       VALUES ($1, $2)
       RETURNING *
     `, [name || 'My Remix Group', userId]);
@@ -270,11 +273,9 @@ router.get("/posts/:groupId/today", authenticateToken, async (req, res) => {
       SELECT
         rp.*,
         u.first_name,
-        u.last_name,
-        COUNT(rl.id) as layer_count
+        u.last_name
       FROM remix_posts rp
       LEFT JOIN users u ON rp.posted_by = u.id
-      LEFT JOIN remix_layers rl ON rp.id = rl.post_id
       WHERE rp.group_id = $1 AND rp.post_date = $2
       GROUP BY rp.id, u.first_name, u.last_name
     `, [groupId, today]);
@@ -314,11 +315,9 @@ router.get("/posts/:groupId/history", authenticateToken, async (req, res) => {
       SELECT
         rp.*,
         u.first_name,
-        u.last_name,
-        COUNT(rl.id) as layer_count
+        u.last_name
       FROM remix_posts rp
       LEFT JOIN users u ON rp.posted_by = u.id
-      LEFT JOIN remix_layers rl ON rp.id = rl.post_id
       WHERE rp.group_id = $1 AND rp.post_date < $2
       GROUP BY rp.id, u.first_name, u.last_name
       ORDER BY rp.post_date DESC
@@ -333,201 +332,189 @@ router.get("/posts/:groupId/history", authenticateToken, async (req, res) => {
   }
 });
 
+
 // ============================================
-// LAYERS (ADDITIONS TO POSTS)
+// LAYERS
 // ============================================
 
-// POST /remixes/layers - Add a layer to a post
+// POST /remixes/layers - Add a photo layer to a post, merging it into the base image
 router.post("/layers", authenticateToken, upload.single('image'), async (req, res) => {
-  const {
-    postId,
-    layerType,
-    textContent,
-    stickerData,
-    positionX = 0.5,
-    positionY = 0.5,
-    scale = 1.0,
-    rotation = 0,
-    metadata
-  } = req.body;
+  const { postId, positionX, positionY, scale, rotation } = req.body;
   const userId = req.user.userId;
 
-  if (!postId || !layerType) {
-    return res.status(400).json({ message: "Post ID and layer type required" });
+  if (!req.file) {
+    return res.status(400).json({ message: "Overlay image required" });
+  }
+  if (!postId || positionX == null || positionY == null || scale == null || rotation == null) {
+    return res.status(400).json({ message: "Missing required layer parameters" });
   }
 
   try {
-    // Verify post exists and user is in the group
-    const postCheck = await db.query(`
-      SELECT rp.id, rp.group_id, rp.expires_at
+    // 1. Fetch the RemixPost (base image)
+    const postResult = await db.query(`
+      SELECT rp.*, rg.id as group_id
       FROM remix_posts rp
-      INNER JOIN remix_group_members rgm
-        ON rp.group_id = rgm.group_id AND rgm.user_id = $1
-      WHERE rp.id = $2
-    `, [userId, postId]);
+      JOIN remix_groups rg ON rp.group_id = rg.id
+      WHERE rp.id = $1
+    `, [postId]);
 
-    if (postCheck.rows.length === 0) {
-      return res.status(403).json({ message: "Post not found or not authorized" });
+    if (postResult.rows.length === 0) {
+      return res.status(404).json({ message: "Remix post not found" });
+    }
+    const post = postResult.rows[0];
+    const groupId = post.group_id;
+
+    // 2. Verify user is in the group of the post
+    const memberCheck = await db.query(`
+      SELECT 1 FROM remix_group_members
+      WHERE group_id = $1 AND user_id = $2
+    `, [groupId, userId]);
+
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ message: "Not a member of this group" });
     }
 
-    const post = postCheck.rows[0];
+    // 3. Read the current base image directly from disk
+    const imageFilename = post.image_url.split('/').pop(); // Extract filename from URL
+    const baseImagePath = path.join(__dirname, '../uploads/remixes', imageFilename);
 
-    // Check if post has expired
-    if (new Date() > new Date(post.expires_at)) {
-      return res.status(400).json({ message: "Post has expired" });
+    let baseImageBuffer;
+    try {
+      baseImageBuffer = await fs.readFile(baseImagePath);
+    } catch (error) {
+      console.error('Failed to read base image from disk:', error);
+      return res.status(500).json({ message: 'Failed to read base image' });
     }
 
-    let contentUrl = null;
+    // Get metadata from base image
+    const baseImageMetadata = await sharp(baseImageBuffer).metadata();
 
-    // Handle image upload for photo layers
-    if (layerType === 'photo' && req.file) {
-      const imageData = await imageStorage.uploadImage(req.file.buffer);
-      contentUrl = imageData.originalUrl;
-    }
+    // 4. Process the overlay image with sharp
+    const overlayImage = sharp(req.file.buffer);
+    const overlayMetadata = await overlayImage.metadata();
 
-    // Insert layer
-    const result = await db.query(`
-      INSERT INTO remix_layers (
-        post_id, added_by, layer_type,
-        content_url, text_content, sticker_data,
-        position_x, position_y, scale, rotation,
-        metadata
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    const baseWidth = baseImageMetadata.width;
+    const baseHeight = baseImageMetadata.height;
+
+    console.log('Base image dimensions:', baseWidth, 'x', baseHeight);
+    console.log('Overlay original dimensions:', overlayMetadata.width, 'x', overlayMetadata.height);
+    console.log('Position (normalized):', positionX, positionY);
+    console.log('Scale:', scale, 'Rotation:', rotation);
+
+    // Convert normalized client coordinates (0-1) to pixel coordinates
+    const pixelCenterX = parseFloat(positionX) * baseWidth;
+    const pixelCenterY = parseFloat(positionY) * baseHeight;
+
+    // Calculate dimensions of the overlay after client-side scaling
+    // Client scale is relative to the *original* overlay image dimensions
+    const clientScaledOverlayWidth = overlayMetadata.width * parseFloat(scale);
+    const clientScaledOverlayHeight = overlayMetadata.height * parseFloat(scale);
+
+    console.log('Scaled overlay dimensions:', Math.round(clientScaledOverlayWidth), 'x', Math.round(clientScaledOverlayHeight));
+
+    // Resize and rotate the overlay
+    const processedOverlayBuffer = await sharp(req.file.buffer)
+      .resize({
+        width: Math.round(clientScaledOverlayWidth),
+        height: Math.round(clientScaledOverlayHeight),
+        fit: sharp.fit.contain,
+        background: { r: 0, g: 0, b: 0, alpha: 0 }
+      })
+      .rotate(parseFloat(rotation), { background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png() // Convert to PNG to preserve transparency
+      .toBuffer();
+
+    // Get metadata of the processed overlay (after resize and rotate)
+    const processedOverlayMetadata = await sharp(processedOverlayBuffer).metadata();
+
+    // Calculate top-left for composite operation
+    const compositeLeft = Math.round(pixelCenterX - (processedOverlayMetadata.width / 2));
+    const compositeTop = Math.round(pixelCenterY - (processedOverlayMetadata.height / 2));
+
+    console.log('Composite position (top-left):', compositeLeft, compositeTop);
+    console.log('Processed overlay dimensions:', processedOverlayMetadata.width, 'x', processedOverlayMetadata.height);
+
+    // 5. Composite the overlay onto the base image
+    const mergedImageBuffer = await sharp(baseImageBuffer)
+      .composite([{
+        input: processedOverlayBuffer,
+        left: compositeLeft,
+        top: compositeTop,
+        blend: 'over'
+      }])
+      .jpeg({ quality: 95 }) // Ensure high quality output
+      .toBuffer();
+
+    // 6. Upload the new merged image
+    const imageData = await imageStorage.uploadImage(mergedImageBuffer);
+
+    // 6.5. Delete the old image files to prevent storage bloat
+    const oldImageFilename = post.image_url.split('/').pop();
+    const oldImageId = oldImageFilename.split('_')[0]; // Extract UUID from filename
+    imageStorage.deleteImage(oldImageId).catch(err => {
+      console.warn('Failed to delete old image:', err);
+      // Don't throw - cleanup failure shouldn't block the request
+    });
+
+    // 7. Update the RemixPost with the new image URL
+    const updatedPostResult = await db.query(`
+      UPDATE remix_posts
+      SET image_url = $1, thumbnail_url = $2,
+          image_width = $3, image_height = $4,
+          updated_at = NOW()
+      WHERE id = $5
       RETURNING *
     `, [
-      postId,
-      userId,
-      layerType,
-      contentUrl,
-      textContent || null,
-      stickerData ? JSON.parse(stickerData) : null,
-      parseFloat(positionX),
-      parseFloat(positionY),
-      parseFloat(scale),
-      parseFloat(rotation),
-      metadata ? JSON.parse(metadata) : null
+      imageData.originalUrl,
+      imageData.thumbnailUrl,
+      imageData.width,
+      imageData.height,
+      postId
     ]);
 
-    const layer = result.rows[0];
+    const updatedPost = updatedPostResult.rows[0];
 
-    // Publish to Kafka for real-time updates
+    // 8. Publish to Kafka for real-time updates
     await producer.send({
       topic: 'remix-updates',
       messages: [{
-        key: post.group_id,
+        key: groupId,
         value: JSON.stringify({
-          type: 'new_layer',
-          groupId: post.group_id,
-          postId,
-          layer,
+          type: 'layer_added',
+          groupId,
+          postId: postId,
+          post: updatedPost, // Send the updated post
           addedBy: userId
         })
       }]
     });
 
     res.status(201).json({
-      message: "Layer added successfully",
-      layer,
+      message: "Layer added and merged successfully",
+      post: updatedPost,
     });
 
-    console.log(`✅ Added ${layerType} layer to post ${postId}`);
+    console.log(`✅ Added layer to remix post ${postId} by user ${userId}`);
 
   } catch (error) {
-    console.error("Error adding layer:", error);
+    console.error("Error adding remix layer:", error);
     res.status(500).json({ message: "Failed to add layer" });
   }
 });
 
-// GET /remixes/layers/:postId - Get all layers for a post
+// GET /remixes/layers/:postId - Get all layers for a post (deprecated, returns empty as layers are merged)
 router.get("/layers/:postId", authenticateToken, async (req, res) => {
   const { postId } = req.params;
-  const userId = req.user.userId;
+  const userId = req.user.userId; // Not directly used, but good to have context
 
   try {
-    // Verify user has access to this post
-    const accessCheck = await db.query(`
-      SELECT 1 FROM remix_posts rp
-      INNER JOIN remix_group_members rgm
-        ON rp.group_id = rgm.group_id AND rgm.user_id = $1
-      WHERE rp.id = $2
-    `, [userId, postId]);
-
-    if (accessCheck.rows.length === 0) {
-      return res.status(403).json({ message: "Not authorized" });
-    }
-
-    // Get layers with user info
-    const result = await db.query(`
-      SELECT
-        rl.*,
-        u.first_name,
-        u.last_name,
-        u.username
-      FROM remix_layers rl
-      INNER JOIN users u ON rl.added_by = u.id
-      WHERE rl.post_id = $1
-      ORDER BY rl.created_at ASC
-    `, [postId]);
-
-    res.json({ layers: result.rows });
-
+    // For now, as layers are immediately merged into the main post image,
+    // we return an empty array to indicate no distinct layers are stored separately.
+    // In a more complex system, this might return historical layer data if stored.
+    res.json({ layers: [] });
   } catch (error) {
-    console.error("Error fetching layers:", error);
+    console.error("Error fetching remix layers (deprecated route):", error);
     res.status(500).json({ message: "Failed to fetch layers" });
-  }
-});
-
-// DELETE /remixes/layers/:layerId - Delete a layer (only creator can delete)
-router.delete("/layers/:layerId", authenticateToken, async (req, res) => {
-  const { layerId } = req.params;
-  const userId = req.user.userId;
-
-  try {
-    // Verify user owns this layer
-    const result = await db.query(`
-      DELETE FROM remix_layers
-      WHERE id = $1 AND added_by = $2
-      RETURNING post_id, layer_type, content_url
-    `, [layerId, userId]);
-
-    if (result.rows.length === 0) {
-      return res.status(403).json({ message: "Not authorized" });
-    }
-
-    const { post_id, layer_type, content_url } = result.rows[0];
-
-    // Delete image if it's a photo layer
-    if (layer_type === 'photo' && content_url) {
-      const imageId = content_url.split('/').pop().split('_')[0];
-      await imageStorage.deleteImage(imageId);
-    }
-
-    // Get group ID for Kafka notification
-    const postResult = await db.query(`
-      SELECT group_id FROM remix_posts WHERE id = $1
-    `, [post_id]);
-
-    if (postResult.rows.length > 0) {
-      await producer.send({
-        topic: 'remix-updates',
-        messages: [{
-          key: postResult.rows[0].group_id,
-          value: JSON.stringify({
-            type: 'layer_deleted',
-            groupId: postResult.rows[0].group_id,
-            postId: post_id,
-            layerId,
-          })
-        }]
-      });
-    }
-
-    res.json({ message: "Layer deleted successfully" });
-
-  } catch (error) {
-    console.error("Error deleting layer:", error);
-    res.status(500).json({ message: "Failed to delete layer" });
   }
 });
 
