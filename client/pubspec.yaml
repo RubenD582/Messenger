@@ -112,6 +112,7 @@ flutter:
     - assets/profile.svg
     - assets/developer.svg
     - assets/verified.svg
+    - assets/messages.svg
 
 
   #   - images/a_dot_ham.jpeg

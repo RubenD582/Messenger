@@ -10,6 +10,7 @@ const { producer } = require('../kafkaClient');
 const sharp = require('sharp');
 const fs = require('fs').promises;
 const path = require('path');
+const turnService = require('../services/turnService');
 
 // Configure multer for memory storage (we'll process with sharp)
 const upload = multer({
@@ -223,6 +224,19 @@ router.post("/posts", authenticateToken, upload.single('image'), async (req, res
 
     const post = result.rows[0];
 
+    // Initialize turn order for the post
+    await turnService.initializeTurnOrder(post.id, groupId);
+
+    // Get updated post with turn information
+    const updatedPostResult = await db.query(`
+      SELECT rp.*, u.first_name, u.last_name
+      FROM remix_posts rp
+      LEFT JOIN users u ON rp.posted_by = u.id
+      WHERE rp.id = $1
+    `, [post.id]);
+
+    const updatedPost = updatedPostResult.rows[0];
+
     // Publish to Kafka for real-time updates
     await producer.send({
       topic: 'remix-updates',
@@ -231,7 +245,7 @@ router.post("/posts", authenticateToken, upload.single('image'), async (req, res
         value: JSON.stringify({
           type: 'new_post',
           groupId,
-          post,
+          post: updatedPost,
           postedBy: userId
         })
       }]
@@ -239,7 +253,7 @@ router.post("/posts", authenticateToken, upload.single('image'), async (req, res
 
     res.status(201).json({
       message: "Post created successfully",
-      post,
+      post: updatedPost,
     });
 
     console.log(`✅ Created remix post for group ${groupId}`);
@@ -268,23 +282,34 @@ router.get("/posts/:groupId/today", authenticateToken, async (req, res) => {
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Get today's post with layer count
+    // Get today's post with all turn information
     const result = await db.query(`
       SELECT
         rp.*,
         u.first_name,
-        u.last_name
+        u.last_name,
+        cu.first_name as current_turn_first_name,
+        cu.last_name as current_turn_last_name,
+        cu.username as current_turn_username
       FROM remix_posts rp
       LEFT JOIN users u ON rp.posted_by = u.id
+      LEFT JOIN users cu ON rp.current_turn_user_id = cu.id
       WHERE rp.group_id = $1 AND rp.post_date = $2
-      GROUP BY rp.id, u.first_name, u.last_name
     `, [groupId, today]);
 
     if (result.rows.length === 0) {
       return res.json({ post: null });
     }
 
-    res.json({ post: result.rows[0] });
+    const post = result.rows[0];
+
+    // Check if it's the current user's turn
+    const turnCheck = await turnService.isUserTurn(post.id, userId);
+
+    res.json({
+      post,
+      isMyTurn: turnCheck.isMyTurn
+    });
 
   } catch (error) {
     console.error("Error fetching today's post:", error);
@@ -333,6 +358,48 @@ router.get("/posts/:groupId/history", authenticateToken, async (req, res) => {
 });
 
 
+// GET /remixes/posts/:postId/turn-status - Get turn status for a post
+router.get("/posts/:postId/turn-status", authenticateToken, async (req, res) => {
+  const { postId } = req.params;
+  const userId = req.user.userId;
+
+  try {
+    // Get post to verify group membership
+    const postResult = await db.query(`
+      SELECT group_id FROM remix_posts WHERE id = $1
+    `, [postId]);
+
+    if (postResult.rows.length === 0) {
+      return res.status(404).json({ message: "Post not found" });
+    }
+
+    const groupId = postResult.rows[0].group_id;
+
+    // Verify user is in the group
+    const memberCheck = await db.query(`
+      SELECT 1 FROM remix_group_members
+      WHERE group_id = $1 AND user_id = $2
+    `, [groupId, userId]);
+
+    if (memberCheck.rows.length === 0) {
+      return res.status(403).json({ message: "Not a member of this group" });
+    }
+
+    // Get turn status
+    const turnStatus = await turnService.getTurnStatus(postId);
+    const turnCheck = await turnService.isUserTurn(postId, userId);
+
+    res.json({
+      ...turnStatus,
+      isMyTurn: turnCheck.isMyTurn
+    });
+
+  } catch (error) {
+    console.error("Error fetching turn status:", error);
+    res.status(500).json({ message: "Failed to fetch turn status" });
+  }
+});
+
 // ============================================
 // LAYERS
 // ============================================
@@ -372,6 +439,15 @@ router.post("/layers", authenticateToken, upload.single('image'), async (req, re
 
     if (memberCheck.rows.length === 0) {
       return res.status(403).json({ message: "Not a member of this group" });
+    }
+
+    // 2.5. Check if it's this user's turn
+    const turnCheck = await turnService.isUserTurn(postId, userId);
+    if (!turnCheck.isMyTurn) {
+      return res.status(403).json({
+        message: turnCheck.reason,
+        currentTurnUserId: turnCheck.currentTurnUserId
+      });
     }
 
     // 3. Read the current base image directly from disk
@@ -474,7 +550,20 @@ router.post("/layers", authenticateToken, upload.single('image'), async (req, re
 
     const updatedPost = updatedPostResult.rows[0];
 
-    // 8. Publish to Kafka for real-time updates
+    // 8. Advance to next turn
+    const turnResult = await turnService.advanceTurn(postId, userId);
+
+    // Get final post with updated turn information
+    const finalPostResult = await db.query(`
+      SELECT rp.*, u.first_name, u.last_name
+      FROM remix_posts rp
+      LEFT JOIN users u ON rp.posted_by = u.id
+      WHERE rp.id = $1
+    `, [postId]);
+
+    const finalPost = finalPostResult.rows[0];
+
+    // 9. Publish to Kafka for real-time updates
     await producer.send({
       topic: 'remix-updates',
       messages: [{
@@ -483,15 +572,17 @@ router.post("/layers", authenticateToken, upload.single('image'), async (req, re
           type: 'layer_added',
           groupId,
           postId: postId,
-          post: updatedPost, // Send the updated post
-          addedBy: userId
+          post: finalPost,
+          addedBy: userId,
+          turnStatus: turnResult
         })
       }]
     });
 
     res.status(201).json({
       message: "Layer added and merged successfully",
-      post: updatedPost,
+      post: finalPost,
+      turnStatus: turnResult,
     });
 
     console.log(`✅ Added layer to remix post ${postId} by user ${userId}`);

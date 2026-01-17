@@ -92,8 +92,8 @@ class ImageStorage {
 
       const result = {
         imageId,
-        originalUrl: `${this.baseUrl}/uploads/remixes/${baseFilename}`,
-        thumbnailUrl: `${this.baseUrl}/uploads/remixes/thumbnails/${thumbnailFilename}`,
+        originalUrl: `/uploads/remixes/${baseFilename}`,
+        thumbnailUrl: `/uploads/remixes/thumbnails/${thumbnailFilename}`,
         width: metadata.width,
         height: metadata.height,
         size: baseStats.size,

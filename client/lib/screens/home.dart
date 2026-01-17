@@ -69,20 +69,9 @@ class _HomeState extends State<Home> {
   int _unreadNotificationCount = 0;
 
   int _selectedIndex = 0;
-  final List<String> _pageTitles = ["Home", "Search", "Notifications", "Profile"];
+  final List<String> _pageTitles = ["Home", "Remix", "Notifications", "Profile"];
 
   void _onItemTapped(int index) {
-    // Handle remix screen navigation (index 1)
-    if (index == 1) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => const RemixScreen(),
-        ),
-      );
-      return;
-    }
-
     if (_selectedIndex != index) {
       _scrollController.jumpTo(0);
     }
@@ -667,17 +656,17 @@ class _HomeState extends State<Home> {
             ),
             BottomNavigationBarItem(
               icon: SizedBox(
-                width: 24,
-                height: 24,
+                width: 20,
+                height: 20,
                 child: Opacity(
                   opacity: 0.5,
-                  child: Icon(CupertinoIcons.camera_fill, color: Colors.white),
+                  child: SvgPicture.asset('assets/messages.svg'),
                 ),
               ),
               activeIcon: SizedBox(
-                width: 24,
-                height: 24,
-                child: Icon(CupertinoIcons.camera_fill, color: Colors.white),
+                width: 20,
+                height: 20,
+                child: SvgPicture.asset('assets/messages.svg'),
               ),
               label: '',
             ),
@@ -934,6 +923,10 @@ class _HomeState extends State<Home> {
                     ),
                   ),
                 ),
+          ] else if (_selectedIndex == 1) ...[
+            SliverFillRemaining(
+              child: RemixScreen(),
+            )
           ] else if (_selectedIndex == 2) ...[
             SliverFillRemaining(
               child: NotificationsScreen(

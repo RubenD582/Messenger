@@ -129,7 +129,8 @@ class RemixService {
   }
 
   /// Get today's post for a group
-  Future<RemixPost?> getTodayPost(String groupId) async {
+  /// Returns a map with 'post' and 'isMyTurn' fields
+  Future<Map<String, dynamic>> getTodayPost(String groupId) async {
     final token = await AuthService.getToken();
 
     final response = await http.get(
@@ -141,8 +142,10 @@ class RemixService {
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
-      if (data['post'] == null) return null;
-      return RemixPost.fromJson(data['post']);
+      return {
+        'post': data['post'] != null ? RemixPost.fromJson(data['post']) : null,
+        'isMyTurn': data['isMyTurn'] ?? false,
+      };
     } else {
       throw Exception('Failed to fetch today\'s post');
     }

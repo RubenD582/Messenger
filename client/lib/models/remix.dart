@@ -1,4 +1,5 @@
 // remix.dart - Models for daily remix feature
+import 'package:client/config/api_config.dart';
 
 class RemixGroup {
   final String id;
@@ -66,6 +67,14 @@ class RemixPost {
   final String? firstName;
   final String? lastName;
   final int? layerCount;
+  final String? currentTurnUserId;
+  final List<String>? turnOrder;
+  final List<String>? contributors;
+  final int? turnCount;
+  final int? maxTurns;
+  final String? currentTurnFirstName;
+  final String? currentTurnLastName;
+  final String? currentTurnUsername;
 
   RemixPost({
     required this.id,
@@ -83,16 +92,33 @@ class RemixPost {
     this.firstName,
     this.lastName,
     this.layerCount,
+    this.currentTurnUserId,
+    this.turnOrder,
+    this.contributors,
+    this.turnCount,
+    this.maxTurns,
+    this.currentTurnFirstName,
+    this.currentTurnLastName,
+    this.currentTurnUsername,
   });
 
   factory RemixPost.fromJson(Map<String, dynamic> json) {
+    // Helper to convert relative URLs to absolute URLs
+    String makeAbsoluteUrl(String? url) {
+      if (url == null || url.isEmpty) return '';
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        return url; // Already absolute
+      }
+      return '${ApiConfig.baseUrl}$url'; // Prepend baseUrl to relative path
+    }
+
     return RemixPost(
       id: json['id'],
       groupId: json['group_id'],
       postedBy: json['posted_by'],
       postDate: DateTime.parse(json['post_date']),
-      imageUrl: json['image_url'],
-      thumbnailUrl: json['thumbnail_url'],
+      imageUrl: makeAbsoluteUrl(json['image_url']),
+      thumbnailUrl: makeAbsoluteUrl(json['thumbnail_url']),
       imageWidth: json['image_width'] != null
           ? int.tryParse(json['image_width'].toString())
           : null,
@@ -110,10 +136,45 @@ class RemixPost {
       layerCount: json['layer_count'] != null
           ? int.tryParse(json['layer_count'].toString())
           : null,
+      currentTurnUserId: json['current_turn_user_id'],
+      turnOrder: json['turn_order'] != null
+          ? (json['turn_order'] is String
+              ? List<String>.from(
+                  (json['turn_order'] as String).isNotEmpty
+                      ? []
+                      : []
+                )
+              : List<String>.from(json['turn_order'] ?? []))
+          : null,
+      contributors: json['contributors'] != null
+          ? (json['contributors'] is String
+              ? List<String>.from(
+                  (json['contributors'] as String).isNotEmpty
+                      ? []
+                      : []
+                )
+              : List<String>.from(json['contributors'] ?? []))
+          : null,
+      turnCount: json['turn_count'] != null
+          ? int.tryParse(json['turn_count'].toString())
+          : null,
+      maxTurns: json['max_turns'] != null
+          ? int.tryParse(json['max_turns'].toString())
+          : null,
+      currentTurnFirstName: json['current_turn_first_name'],
+      currentTurnLastName: json['current_turn_last_name'],
+      currentTurnUsername: json['current_turn_username'],
     );
   }
 
   String get posterName => '${firstName ?? ''} ${lastName ?? ''}'.trim();
+
+  String get currentTurnUserName {
+    if (currentTurnFirstName != null && currentTurnLastName != null) {
+      return '$currentTurnFirstName $currentTurnLastName'.trim();
+    }
+    return currentTurnUsername ?? 'Unknown';
+  }
 
   bool get hasExpired =>
       expiresAt != null && DateTime.now().isAfter(expiresAt!);
@@ -161,12 +222,21 @@ class RemixLayer {
   });
 
   factory RemixLayer.fromJson(Map<String, dynamic> json) {
+    // Helper to convert relative URLs to absolute URLs
+    String? makeAbsoluteUrl(String? url) {
+      if (url == null || url.isEmpty) return url;
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        return url; // Already absolute
+      }
+      return '${ApiConfig.baseUrl}$url'; // Prepend baseUrl to relative path
+    }
+
     return RemixLayer(
       id: json['id'],
       postId: json['post_id'],
       addedBy: json['added_by'],
       layerType: json['layer_type'],
-      contentUrl: json['content_url'],
+      contentUrl: makeAbsoluteUrl(json['content_url']),
       textContent: json['text_content'],
       stickerData: json['sticker_data'] != null
           ? Map<String, dynamic>.from(json['sticker_data'])

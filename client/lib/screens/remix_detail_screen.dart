@@ -38,6 +38,7 @@ class _RemixDetailScreenState extends State<RemixDetailScreen> {
   String? _currentUserId;
   bool _isLoadingRemix = false;
   bool _isLoadingPost = false;
+  bool _isMyTurn = false;
 
   @override
   void initState() {
@@ -60,7 +61,9 @@ class _RemixDetailScreenState extends State<RemixDetailScreen> {
   Future<void> _loadGroupData() async {
     try {
       _members = await _remixService.getGroupMembers(widget.group.id);
-      _todayPost = await _remixService.getTodayPost(widget.group.id);
+      final postData = await _remixService.getTodayPost(widget.group.id);
+      _todayPost = postData['post'] as RemixPost?;
+      _isMyTurn = postData['isMyTurn'] as bool? ?? false;
       _history = await _remixService.getPostHistory(groupId: widget.group.id);
 
       setState(() {});
@@ -72,7 +75,93 @@ class _RemixDetailScreenState extends State<RemixDetailScreen> {
   }
 
   bool _canRemix() {
-    return _todayPost != null && !_todayPost!.hasExpired;
+    return _todayPost != null && !_todayPost!.hasExpired && _isMyTurn && !(_todayPost!.isComplete);
+  }
+
+  void _showMembersPopup() {
+    showCupertinoModalPopup(
+      context: context,
+      builder: (BuildContext context) => Container(
+        height: MediaQuery.of(context).size.height * 0.5,
+        decoration: const BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+          ),
+        ),
+        child: Column(
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Group Members',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(color: Colors.grey, height: 1),
+            // Member list
+            Expanded(
+              child: ListView.builder(
+                itemCount: _members.length,
+                itemBuilder: (context, index) {
+                  final member = _members[index];
+                  final isCurrentUser = member.id == _currentUserId;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 20,
+                          backgroundImage: const AssetImage('assets/noprofile.png'),
+                          backgroundColor: Colors.grey[700],
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            isCurrentUser ? 'You' : '${member.firstName} ${member.lastName}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _createPost() async {
@@ -330,22 +419,25 @@ class _RemixDetailScreenState extends State<RemixDetailScreen> {
           ? Stack(
               fit: StackFit.expand,
               children: [
-                CachedNetworkImage(
-                  imageUrl: _todayPost!.imageUrl,
-                  fit: BoxFit.cover,
-                  placeholder: (context, url) => Container(
-                    color: Colors.white.withValues(alpha: 0.05),
-                    child: const Center(
-                      child: CupertinoActivityIndicator(
-                        color: Colors.white,
-                        radius: 20,
+                Hero(
+                  tag: 'remix_image_${widget.group.id}',
+                  child: CachedNetworkImage(
+                    imageUrl: _todayPost!.imageUrl,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
+                      color: Colors.white.withValues(alpha: 0.05),
+                      child: const Center(
+                        child: CupertinoActivityIndicator(
+                          color: Colors.white,
+                          radius: 20,
+                        ),
                       ),
                     ),
-                  ),
-                  errorWidget: (context, url, error) => const Icon(
-                    Icons.error,
-                    color: Colors.white,
-                    size: 48,
+                    errorWidget: (context, url, error) => const Icon(
+                      Icons.error,
+                      color: Colors.white,
+                      size: 48,
+                    ),
                   ),
                 ),
 
@@ -362,7 +454,7 @@ class _RemixDetailScreenState extends State<RemixDetailScreen> {
                         end: Alignment.bottomCenter,
                         colors: [
                           Colors.transparent,
-                          Colors.black.withOpacity(1), // Less harsh black
+                          Colors.black.withValues(alpha: 1.0), // Less harsh black
                         ],
                       ),
                     ),
@@ -374,21 +466,23 @@ class _RemixDetailScreenState extends State<RemixDetailScreen> {
 
               ],
             )
-          : Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 100,
-                    height: 100,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      CupertinoIcons.camera,
-                      size: 50,
-                      color: Colors.white.withValues(alpha: 0.4),
+          : Hero(
+              tag: 'remix_image_${widget.group.id}',
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 100,
+                      height: 100,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        CupertinoIcons.camera,
+                        size: 50,
+                        color: Colors.white.withValues(alpha: 0.4),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -412,6 +506,7 @@ class _RemixDetailScreenState extends State<RemixDetailScreen> {
                 ],
               ),
             ),
+          ),
     );
   }
 
@@ -462,54 +557,127 @@ class _RemixDetailScreenState extends State<RemixDetailScreen> {
           ),
           const SizedBox(height: 10),
 
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: _members.map((member) {
-              final isCurrentUser = member.id == _currentUserId;
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(100),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+          // Stacked profile pictures with info icon
+          Row(
+            children: [
+              SizedBox(
+                height: 32,
+                width: _members.isEmpty ? 0 : (_members.length >= 4 ? 100 : (_members.length * 22.0) + 10),
+                child: Stack(
                   children: [
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        shape: BoxShape.circle,
+                    // Show up to 4 members
+                    for (int i = 0; i < (_members.length > 4 ? 4 : _members.length); i++)
+                      Positioned(
+                        left: i * 22.0,
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(color: Colors.black, width: 2),
+                          ),
+                          child: CircleAvatar(
+                            radius: 14,
+                            backgroundImage: const AssetImage('assets/noprofile.png'),
+                            backgroundColor: Colors.grey[700],
+                          ),
+                        ),
                       ),
-                      child: Center(
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Info icon
+              GestureDetector(
+                onTap: _showMembersPopup,
+                child: Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.info_outline,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          // Turn status
+          if (_todayPost != null && !_todayPost!.isComplete)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 16),
+                Text(
+                  'CURRENT TURN',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.5),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: _isMyTurn
+                        ? Colors.white.withValues(alpha: 0.15)
+                        : Colors.white.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: _isMyTurn
+                          ? Colors.white.withValues(alpha: 0.3)
+                          : Colors.white.withValues(alpha: 0.1),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _isMyTurn ? Icons.timer : Icons.hourglass_empty,
+                        color: _isMyTurn ? Colors.white : Colors.white.withValues(alpha: 0.6),
+                        size: 18,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
                         child: Text(
-                          member.firstName.isNotEmpty
-                              ? member.firstName[0].toUpperCase()
-                              : '?',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
+                          _isMyTurn
+                              ? 'Your turn to add!'
+                              : '${_todayPost!.currentTurnUserName}\'s turn',
+                          style: TextStyle(
+                            color: _isMyTurn ? Colors.white : Colors.white.withValues(alpha: 0.7),
+                            fontSize: 14,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      isCurrentUser ? 'You' : member.firstName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
+                      if (_todayPost!.turnCount != null && _todayPost!.maxTurns != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            '${_todayPost!.turnCount}/${_todayPost!.maxTurns}',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.8),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              );
-            }).toList(),
-          ),
+              ],
+            ),
         ],
       ),
     );
@@ -669,7 +837,13 @@ class _RemixDetailScreenState extends State<RemixDetailScreen> {
             ),
             child: Text(
               hasPost
-                  ? (canRemix ? 'Add Your Remix' : 'Expired')
+                  ? (canRemix
+                      ? 'Add Your Remix'
+                      : (_todayPost!.isComplete
+                          ? 'Remix Complete!'
+                          : (!_isMyTurn && _todayPost!.currentTurnUserId != null
+                              ? '${_todayPost!.currentTurnUserName}\'s Turn'
+                              : (_todayPost!.hasExpired ? 'Expired' : 'Not Your Turn'))))
                   : 'Post Base Photo',
               textAlign: TextAlign.center,
               style: TextStyle(
